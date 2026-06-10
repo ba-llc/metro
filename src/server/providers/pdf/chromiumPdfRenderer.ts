@@ -1,9 +1,30 @@
-import { chromium } from "playwright-core";
+import { chromium, type Browser } from "playwright-core";
 import type { PdfPageSize, PdfRenderer } from "./PdfRenderer";
 
+async function launchBrowser(): Promise<Browser> {
+  if (process.env.CHROMIUM_EXECUTABLE_PATH) {
+    return chromium.launch({
+      executablePath: process.env.CHROMIUM_EXECUTABLE_PATH,
+      headless: true,
+    });
+  }
+
+  // Vercel serverless: bundled Chromium via @sparticuz/chromium.
+  if (process.env.VERCEL === "1") {
+    const chromiumPack = (await import("@sparticuz/chromium")).default;
+    return chromium.launch({
+      args: chromiumPack.args,
+      executablePath: await chromiumPack.executablePath(),
+      headless: true,
+    });
+  }
+
+  // Local dev: use the system Chrome install (no browser download).
+  return chromium.launch({ channel: "chrome" });
+}
+
 /**
- * Renders HTML to PDF with headless Chromium via the locally installed Chrome
- * channel (no browser download required in dev). Swap for a hosted render
+ * Renders HTML to PDF with headless Chromium. Swap for a hosted render
  * service by implementing PdfRenderer.
  */
 export class ChromiumPdfRenderer implements PdfRenderer {
@@ -11,10 +32,10 @@ export class ChromiumPdfRenderer implements PdfRenderer {
     html: string,
     options: { pageSize: PdfPageSize },
   ): Promise<Buffer> {
-    const browser = await chromium.launch({ channel: "chrome" });
+    const browser = await launchBrowser();
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle" });
+      await page.setContent(html, { waitUntil: "load" });
       const pdf = await page.pdf({
         format: "Letter",
         landscape: options.pageSize === "letter-landscape",

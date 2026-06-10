@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import React, { type ReactElement } from "react";
 import { formatRate, formatSF, formatTraffic, formatCurrency, labelize } from "@/lib/utils";
 import type { TemplateTheme } from "@/features/marketing/schemas";
 import type { RenderContext, RenderImages } from "./types";

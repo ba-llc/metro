@@ -3,7 +3,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname),
-  serverExternalPackages: ["playwright-core", "@prisma/client", "bcryptjs"],
+  serverExternalPackages: [
+    "playwright-core",
+    "@sparticuz/chromium",
+    "@prisma/client",
+    "bcryptjs",
+  ],
   webpack: (config, { isServer }) => {
     if (isServer) {
       // Konva's node entry optionally requires the native "canvas" package,

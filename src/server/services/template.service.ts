@@ -1,7 +1,10 @@
 import type { Prisma, TemplateChannel } from "@prisma/client";
 import { db } from "@/server/db";
 import type { OrgContext } from "@/server/auth/context";
-import type { TemplateCreateInput } from "@/features/marketing/schemas";
+import {
+  metroCommercialTheme,
+  type TemplateCreateInput,
+} from "@/features/marketing/schemas";
 
 export const systemTemplates: {
   name: string;
@@ -12,7 +15,7 @@ export const systemTemplates: {
   {
     name: "Metro Commercial Leasing Flyer",
     channel: "FLYER",
-    theme: {},
+    theme: metroCommercialTheme,
     pages: [
       { block: "cover" },
       { block: "aerial", title: "Aerial Overview" },
@@ -27,7 +30,7 @@ export const systemTemplates: {
   {
     name: "Metro Commercial Property Brochure",
     channel: "BROCHURE",
-    theme: {},
+    theme: metroCommercialTheme,
     pages: [
       { block: "cover" },
       { block: "aerial", title: "Property Overview" },
@@ -39,10 +42,19 @@ export const systemTemplates: {
   {
     name: "Metro Commercial Email Flyer",
     channel: "EMAIL",
-    theme: {},
+    theme: metroCommercialTheme,
     pages: [{ block: "cover" }],
   },
 ];
+
+function themeIsEmpty(theme: unknown): boolean {
+  return (
+    theme == null ||
+    (typeof theme === "object" &&
+      !Array.isArray(theme) &&
+      Object.keys(theme).length === 0)
+  );
+}
 
 /** Idempotently ensures the system templates exist (also run by seed). */
 export async function ensureSystemTemplates(): Promise<void> {
@@ -59,6 +71,11 @@ export async function ensureSystemTemplates(): Promise<void> {
           pages: t.pages as Prisma.InputJsonValue,
           isSystem: true,
         },
+      });
+    } else if (themeIsEmpty(existing.theme)) {
+      await db.template.update({
+        where: { id: existing.id },
+        data: { theme: t.theme as Prisma.InputJsonValue },
       });
     }
   }

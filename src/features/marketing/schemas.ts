@@ -51,3 +51,6 @@ export const documentCreateSchema = z.object({
 export type TemplateTheme = z.infer<typeof templateThemeSchema>;
 export type TemplatePage = z.infer<typeof templatePageSchema>;
 export type TemplateCreateInput = z.infer<typeof templateCreateSchema>;
+
+/** Metro Commercial default brand tokens — used by system templates. */
+export const metroCommercialTheme: TemplateTheme = templateThemeSchema.parse({});

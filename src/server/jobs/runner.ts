@@ -27,11 +27,16 @@ export async function enqueueJob<T extends JobType>(
     },
   });
 
-  // Execute after the current request completes; failures land on the job row
-  // and the target artifact (MapAsset / GeneratedDocument) status.
-  setImmediate(() => {
-    void runJob(ctx, job.id, type, payload);
-  });
+  const execute = () => runJob(ctx, job.id, type, payload);
+
+  // On Vercel, keep the serverless function alive until the job finishes.
+  if (process.env.VERCEL === "1") {
+    void import("next/server").then(({ after }) => {
+      after(() => execute());
+    });
+  } else {
+    setImmediate(() => void execute());
+  }
 
   return job.id;
 }

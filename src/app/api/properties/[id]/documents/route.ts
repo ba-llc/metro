@@ -1,5 +1,8 @@
 import { handle } from "@/server/api/respond";
 import { requireOrg, requireWriter } from "@/server/auth/context";
+
+/** PDF render runs in after() — allow time for Chromium on Vercel. */
+export const maxDuration = 60;
 import {
   createDocument,
   listDocuments,
