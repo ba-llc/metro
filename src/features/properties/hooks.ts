@@ -237,6 +237,18 @@ export function useDeletePhoto(propertyId: string) {
 
 // --- Demographics ---
 
+export function useAutoFetchDemographics(propertyId: string) {
+  const invalidate = useInvalidateProperty(propertyId);
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<DemographicRecord[]>(
+        `/api/properties/${propertyId}/demographics/auto-fetch`,
+        { method: "POST" },
+      ),
+    onSuccess: invalidate,
+  });
+}
+
 export function useAddDemographics(propertyId: string) {
   const invalidate = useInvalidateProperty(propertyId);
   return useMutation({

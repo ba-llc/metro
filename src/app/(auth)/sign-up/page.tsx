@@ -40,7 +40,7 @@ export default function SignUpPage() {
         redirect: false,
       });
       if (result?.error) throw new Error("Sign in failed after registration");
-      router.push("/properties");
+      router.push("/dashboard");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Registration failed");

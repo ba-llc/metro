@@ -106,6 +106,8 @@ export default function PropertyWorkspacePage({
           <DemographicsPanel
             propertyId={propertyId}
             demographics={property.demographics}
+            hasZip={Boolean(property.address?.zip)}
+            geocoded={property.latitude != null}
           />
         </div>
         <div className="space-y-6">

@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
-import type { MapCreateInput } from "./schemas";
+import type { MapCreateInput, MapParams } from "./schemas";
 
 export type MapAssetRecord = {
   id: string;
@@ -15,7 +15,7 @@ export type MapAssetRecord = {
   imageAssetId: string | null;
   provider: string;
   error: string | null;
-  params: { radiusMiles?: number[]; categories?: string[] };
+  params: MapParams & { center?: unknown; resolvedPlaces?: unknown };
   createdAt: string;
 };
 
@@ -43,6 +43,41 @@ export function useGenerateMap(propertyId: string) {
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["maps", propertyId] }),
   });
+}
+
+export function useRegenerateMap(propertyId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ mapId, input }: { mapId: string; input: MapCreateInput }) =>
+      apiFetch<MapAssetRecord>(`/api/maps/${mapId}`, {
+        method: "PATCH",
+        json: input,
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["maps", propertyId] }),
+  });
+}
+
+/** Fetches a server-rendered preview PNG (not the JSON envelope). */
+export async function fetchMapPreviewBlob(
+  propertyId: string,
+  input: MapCreateInput,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const res = await fetch(`/api/properties/${propertyId}/maps/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+    signal,
+  });
+
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => null)) as
+      | { error?: { message?: string } }
+      | null;
+    throw new Error(payload?.error?.message ?? `Preview failed (${res.status})`);
+  }
+
+  return res.blob();
 }
 
 export function useDeleteMap(propertyId: string) {

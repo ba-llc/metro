@@ -34,7 +34,7 @@ export default function SignInPage() {
       setError("Invalid email or password");
       return;
     }
-    router.push("/properties");
+    router.push("/dashboard");
     router.refresh();
   });
 

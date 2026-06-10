@@ -1,12 +1,24 @@
 import { db } from "@/server/db";
 import { hashPassword } from "@/server/auth/password";
 import { ApiError } from "@/server/api/respond";
+import type { OrgContext } from "@/server/auth/context";
 
 function slugify(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+export async function getOrganization(ctx: OrgContext) {
+  const organization = await db.organization.findFirst({
+    where: { id: ctx.organizationId },
+    select: { id: true, name: true, slug: true },
+  });
+  if (!organization) {
+    throw new ApiError("NOT_FOUND", "Organization not found");
+  }
+  return organization;
 }
 
 /** Bootstrap signup: creates a user, their organization, and OWNER membership. */

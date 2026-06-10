@@ -5,8 +5,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
-import { Select } from "@/components/ui/input";
-import { Field } from "@/components/ui/field";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/empty-state";
 import { assetUrl } from "@/lib/api";
@@ -16,12 +14,22 @@ import {
   useGeocodeProperty,
   usePropertyDetail,
 } from "@/features/properties/hooks";
+import { MapGenerateForm } from "@/features/maps/components/map-generate-form";
+import { formatMapParamsSummary } from "@/features/maps/format-params";
+import { mapAssetToInput } from "@/features/maps/map-input";
 import {
   useDeleteMap,
   useGenerateMap,
   useMaps,
+  useRegenerateMap,
+  type MapAssetRecord,
 } from "@/features/maps/hooks";
-import { mapKinds, retailCategories } from "@/features/maps/schemas";
+import type { MapCreateInput } from "@/features/maps/schemas";
+
+type ModalMode =
+  | { type: "closed" }
+  | { type: "create" }
+  | { type: "edit"; map: MapAssetRecord };
 
 export default function MapsPage({
   params,
@@ -29,34 +37,38 @@ export default function MapsPage({
   params: Promise<{ propertyId: string }>;
 }) {
   const { propertyId } = use(params);
-  const [generateOpen, setGenerateOpen] = useState(false);
-  const [kind, setKind] = useState<(typeof mapKinds)[number]>("SATELLITE_AERIAL");
-  const [categories, setCategories] = useState<string[]>([
-    "grocery_or_supermarket",
-    "restaurant",
-    "gym",
-  ]);
+  const [modal, setModal] = useState<ModalMode>({ type: "closed" });
 
   const { data: property } = usePropertyDetail(propertyId);
   const { data: maps, isLoading } = useMaps(propertyId);
   const generateMap = useGenerateMap(propertyId);
+  const regenerateMap = useRegenerateMap(propertyId);
   const deleteMap = useDeleteMap(propertyId);
   const geocode = useGeocodeProperty(propertyId);
 
   const geocoded = property?.latitude != null;
+  const editing = modal.type === "edit" ? modal.map : null;
 
-  function onGenerate() {
-    generateMap.mutate(
-      {
-        kind,
-        params: {
-          ...(kind === "RADIUS" ? { radiusMiles: [1, 3, 5] } : {}),
-          ...(kind === "RETAIL" ? { radiusMiles: [3], categories } : {}),
-        },
-      },
-      { onSuccess: () => setGenerateOpen(false) },
-    );
+  function closeModal() {
+    setModal({ type: "closed" });
   }
+
+  function handleSubmit(input: MapCreateInput) {
+    if (modal.type === "edit") {
+      regenerateMap.mutate(
+        { mapId: modal.map.id, input },
+        { onSuccess: closeModal },
+      );
+      return;
+    }
+    generateMap.mutate(input, { onSuccess: closeModal });
+  }
+
+  const formLoading =
+    modal.type === "edit" ? regenerateMap.isPending : generateMap.isPending;
+  const formError =
+    (modal.type === "edit" ? regenerateMap.error : generateMap.error)?.message ??
+    null;
 
   return (
     <div>
@@ -64,7 +76,10 @@ export default function MapsPage({
         title="Maps"
         subtitle="Declarative map specs — every artifact is regenerable from its parameters."
         actions={
-          <Button onClick={() => setGenerateOpen(true)} disabled={!geocoded}>
+          <Button
+            onClick={() => setModal({ type: "create" })}
+            disabled={!geocoded}
+          >
             Generate Map
           </Button>
         }
@@ -95,9 +110,12 @@ export default function MapsPage({
       ) : !maps || maps.length === 0 ? (
         <EmptyState
           title="No maps generated yet"
-          description="Generate satellite aerials, trade area maps, 1/3/5-mile radius rings, and retail POI maps from the property address."
+          description="Generate satellite aerials, trade area maps, radius rings, and retail POI maps — with full control over zoom, framing, and output size."
           action={
-            <Button onClick={() => setGenerateOpen(true)} disabled={!geocoded}>
+            <Button
+              onClick={() => setModal({ type: "create" })}
+              disabled={!geocoded}
+            >
               Generate Map
             </Button>
           }
@@ -105,34 +123,50 @@ export default function MapsPage({
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {maps.map((map) => (
-            <Card key={map.id}>
-              {map.imageAssetId ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={assetUrl(map.imageAssetId)}
-                  alt={labelize(map.kind)}
-                  className="aspect-[4/3] w-full rounded-t-lg object-cover"
-                />
-              ) : (
-                <div className="flex aspect-[4/3] items-center justify-center rounded-t-lg bg-slate-100">
-                  {map.status === "FAILED" ? (
-                    <p className="px-4 text-center text-xs text-red-600">
-                      {map.error ?? "Generation failed"}
-                    </p>
-                  ) : (
-                    <Spinner label="Generating..." />
-                  )}
+            <Card key={map.id} className="overflow-hidden">
+              <div className="relative">
+                <div className="absolute right-2 top-2 z-10">
+                  <StatusBadge status={map.status} />
                 </div>
-              )}
+                {map.imageAssetId ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={assetUrl(map.imageAssetId)}
+                    alt={labelize(map.kind)}
+                    className="aspect-[4/3] w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex aspect-[4/3] items-center justify-center bg-slate-100">
+                    {map.status === "FAILED" ? (
+                      <p className="px-4 text-center text-xs text-red-600">
+                        {map.error ?? "Generation failed"}
+                      </p>
+                    ) : (
+                      <Spinner label="Generating..." />
+                    )}
+                  </div>
+                )}
+              </div>
               <CardContent className="flex items-center justify-between py-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
                     {labelize(map.kind)}
                   </p>
-                  <p className="text-xs text-slate-500">{formatDate(map.createdAt)}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatMapParamsSummary(map.kind, map.params)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {formatDate(map.createdAt)}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusBadge status={map.status} />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setModal({ type: "edit", map })}
+                  >
+                    Edit
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
@@ -149,66 +183,20 @@ export default function MapsPage({
       )}
 
       <Modal
-        open={generateOpen}
-        onClose={() => setGenerateOpen(false)}
-        title="Generate Map"
+        open={modal.type !== "closed"}
+        onClose={closeModal}
+        title={editing ? "Edit Map" : "Generate Map"}
+        size="xl"
       >
-        <div className="space-y-4">
-          <Field label="Map type">
-            <Select
-              value={kind}
-              onChange={(e) => setKind(e.target.value as typeof kind)}
-            >
-              {mapKinds.map((k) => (
-                <option key={k} value={k}>
-                  {labelize(k)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-
-          {kind === "RADIUS" ? (
-            <p className="text-sm text-slate-500">
-              Generates 1, 3, and 5-mile radius rings centered on the property.
-            </p>
-          ) : null}
-
-          {kind === "RETAIL" ? (
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-600">
-                POI categories
-              </p>
-              <div className="space-y-1.5">
-                {retailCategories.map((cat) => (
-                  <label key={cat.id} className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={categories.includes(cat.id)}
-                      onChange={(e) =>
-                        setCategories((prev) =>
-                          e.target.checked
-                            ? [...prev, cat.id]
-                            : prev.filter((c) => c !== cat.id),
-                        )
-                      }
-                    />
-                    {cat.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {generateMap.error ? (
-            <p className="text-sm text-red-600">{generateMap.error.message}</p>
-          ) : null}
-
-          <div className="flex justify-end">
-            <Button loading={generateMap.isPending} onClick={onGenerate}>
-              Generate
-            </Button>
-          </div>
-        </div>
+        <MapGenerateForm
+          propertyId={propertyId}
+          loading={formLoading}
+          error={formError}
+          initialInput={editing ? mapAssetToInput(editing) : undefined}
+          submitLabel={editing ? "Regenerate" : "Generate"}
+          onCancel={closeModal}
+          onSubmit={handleSubmit}
+        />
       </Modal>
     </div>
   );
