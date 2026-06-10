@@ -41,11 +41,21 @@ export async function geocodeProperty(ctx: OrgContext, propertyId: string) {
   }
 
   const { street, city, state, zip } = property.address;
-  const location = await getMapProvider().geocode(
-    `${street}, ${city}, ${state} ${zip}`,
-  );
+  const address = [street, city, state, zip].filter(Boolean).join(", ");
+
+  let location;
+  try {
+    location = await getMapProvider().geocode(address);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    throw new ApiError("INTERNAL", message);
+  }
+
   if (!location) {
-    throw new ApiError("VALIDATION", "Address could not be geocoded");
+    throw new ApiError(
+      "VALIDATION",
+      "Address could not be geocoded. Verify the street, city, state, and zip are correct.",
+    );
   }
 
   return db.property.update({

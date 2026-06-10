@@ -91,5 +91,23 @@ and spec fields.
 ## Configuration
 
 ```
-GOOGLE_MAPS_API_KEY=   # Geocoding, Static Maps, Places
+GOOGLE_MAPS_API_KEY=   # server-side only — never expose to the browser
 ```
+
+### Google Cloud setup
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) → APIs & Services →
+   **Library** and enable:
+   - **Geocoding API** (property address → lat/lng)
+   - **Maps Static API** (print-quality map images)
+   - **Places API** (retail POI search on `RETAIL` maps)
+2. APIs & Services → **Credentials** → create or edit the API key used by Metro.
+3. Under **API restrictions**, allow at minimum Geocoding API, Maps Static API, and
+   Places API (or choose "Don't restrict key" while testing).
+4. Under **Application restrictions**, server-side calls from Vercel have no browser
+   referrer — use IP restrictions for known egress IPs, or "None" during initial setup.
+5. Set `GOOGLE_MAPS_API_KEY` in local `.env` and in Vercel project environment
+   variables (Production + Preview).
+
+If geocoding fails with `REQUEST_DENIED`, the key is present but the Geocoding API is
+not enabled or is blocked by key restrictions.

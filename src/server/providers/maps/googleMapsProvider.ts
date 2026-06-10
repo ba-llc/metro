@@ -11,25 +11,56 @@ const STATIC_URL = "https://maps.googleapis.com/maps/api/staticmap";
 const PLACES_URL =
   "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
 
+type GoogleApiStatus = {
+  status: string;
+  error_message?: string;
+};
+
+/** User-facing guidance for common Google Maps Platform failures. */
+function googleMapsError(
+  operation: string,
+  { status, error_message }: GoogleApiStatus,
+): Error {
+  if (status === "REQUEST_DENIED") {
+    return new Error(
+      "Google Maps API request denied. Enable Geocoding API, Maps Static API, and Places API on the Google Cloud project, then confirm the API key restrictions include those APIs.",
+    );
+  }
+  if (status === "OVER_QUERY_LIMIT") {
+    return new Error(
+      "Google Maps API quota exceeded. Check billing and usage limits in Google Cloud Console.",
+    );
+  }
+  const detail = error_message ? ` ${error_message}` : "";
+  return new Error(`${operation} failed (${status}).${detail}`);
+}
+
 export class GoogleMapsProvider implements MapProvider {
   readonly name = "google";
 
   private get apiKey(): string {
-    const key = process.env.GOOGLE_MAPS_API_KEY;
-    if (!key) throw new Error("GOOGLE_MAPS_API_KEY is not configured");
+    const key = process.env.GOOGLE_MAPS_API_KEY?.trim();
+    if (!key) {
+      throw new Error(
+        "GOOGLE_MAPS_API_KEY is not configured. Add it to your environment variables.",
+      );
+    }
     return key;
   }
 
   async geocode(address: string): Promise<LatLng | null> {
     const url = `${GEOCODE_URL}?address=${encodeURIComponent(address)}&key=${this.apiKey}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Geocoding failed: ${res.status}`);
-    const json = (await res.json()) as {
-      status: string;
+    if (!res.ok) throw new Error(`Geocoding request failed: HTTP ${res.status}`);
+    const json = (await res.json()) as GoogleApiStatus & {
       results: { geometry: { location: LatLng } }[];
     };
+    if (json.status === "ZERO_RESULTS") return null;
+    if (json.status !== "OK") {
+      throw googleMapsError("Geocoding", json);
+    }
     const location = json.results[0]?.geometry.location;
-    return json.status === "OK" && location ? location : null;
+    return location ?? null;
   }
 
   staticMapUrl(spec: StaticMapSpec): string {
@@ -84,8 +115,9 @@ export class GoogleMapsProvider implements MapProvider {
         vicinity?: string;
       }[];
     };
-    if (json.status !== "OK" && json.status !== "ZERO_RESULTS") {
-      throw new Error(`Places search failed: ${json.status}`);
+    if (json.status === "ZERO_RESULTS") return [];
+    if (json.status !== "OK") {
+      throw googleMapsError("Places search", json);
     }
     return json.results.slice(0, req.maxResults ?? 15).map((r) => ({
       name: r.name,
