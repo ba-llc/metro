@@ -1,0 +1,57 @@
+---
+description: Commercial real estate domain knowledge - property types, leasing terms, broker workflows
+alwaysApply: false
+---
+
+# Commercial Real Estate Domain
+
+## Property Types
+
+- **Shopping center** — multi-tenant retail (strip, neighborhood, community, power
+  center); anchored by grocery/big-box tenants.
+- **Retail** — single or small multi-tenant retail buildings.
+- **Mixed-use** — combined retail/office/residential.
+- **Office** — class A/B/C; measured in rentable square feet (RSF).
+- **Industrial** — warehouse, flex, distribution; clear heights, dock doors matter.
+- **Pad site / outparcel** — standalone parcel at a center's edge (banks, QSR
+  drive-thrus); sold or ground-leased separately.
+
+## Key Concepts
+
+- **Available suite/space** — a leasable unit: suite number, square footage (SF),
+  asking rate, space type (inline, endcap, anchor, pad).
+- **GLA** — gross leasable area of a property.
+- **Asking rate** — usually $/SF/year. **NNN (triple net)** means tenant also pays
+  taxes, insurance, CAM; **Gross/FS** means landlord pays. Always display rate type.
+- **Anchor tenant** — large traffic-driving tenant (grocer, big-box); co-tenancy with
+  anchors is a major selling point.
+- **Tenant roster** — current tenants with logos; signals center quality.
+- **Traffic counts** — vehicles per day (VPD) on adjacent roads; cite road name, count,
+  year, and source.
+- **Demographics** — population, households, average household income, daytime
+  population, housing values, median age — reported for 1/3/5-mile radii (or drive
+  times) around the property.
+- **Trade area** — the geographic area a property draws customers from.
+
+## Marketing Outputs
+
+- **Leasing flyer** — 2–8 page PDF: cover, aerial, site plan with availability, demos,
+  tenant logos, broker contacts. The workhorse asset.
+- **Offering memorandum (OM)** — long-form investment sale package: financials,
+  rent roll, market overview.
+- **LoopNet / Crexi** — the dominant CRE listing marketplaces; listings need photos,
+  aerials, site plans, space-by-space availability data.
+
+## Broker Workflow Reality
+
+Brokers receive engineering site plans (CAD-exported PDFs), trace available spaces,
+label SF, add tenant logos, build radius/demo maps, assemble packages, and revise
+constantly as spaces lease. Marketing coordinators rebuild the same assets per channel.
+This platform exists to eliminate that duplication — see `product-vision.mdc`.
+
+## Display Conventions
+
+- Square footage: `12,500 SF` (comma-separated, "SF" suffix)
+- Rates: `$24.00/SF NNN`
+- Radii: `1 Mile | 3 Mile | 5 Mile`
+- Traffic: `24,500 VPD (2025)`

@@ -1,0 +1,27 @@
+---
+description: Core product philosophy - Property Record is the source of truth
+alwaysApply: true
+---
+
+# Product Vision
+
+Metro Marketing Studio is a **Commercial Real Estate Marketing Operating System** —
+NOT a PDF generation tool, NOT a flyer generator, NOT a document editor.
+
+## Non-Negotiable Principles
+
+1. **The Property Record is the source of truth.** All data about a property (address,
+   site plans, spaces, tenants, contacts, photos, maps, traffic, demographics) lives in
+   one structured record. Every feature must derive from, or feed into, it.
+2. **PDFs and all marketing assets are outputs, not the product.** Flyers, brochures,
+   OMs, emails, websites, listings, and social graphics are regenerable projections of
+   the Property Record (`GeneratedDocument` with a `dataSnapshot`).
+3. **Never duplicate property data into an output.** Outputs reference record fields
+   (e.g. annotation label bindings to `Space.squareFootage`); they do not copy values.
+4. **New output channels are renderers, not features.** Adding LoopNet/Crexi/social
+   support means registering a renderer against the Marketing Engine — never
+   redesigning the data model or application.
+5. **All future features derive from Property Records.** If a proposed feature creates
+   data that lives outside the Property Record graph, redesign it.
+
+See `docs/product-vision.md` for the full vision.

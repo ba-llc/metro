@@ -1,0 +1,35 @@
+---
+description: Shared design system - reuse before creating components
+globs: src/components/**,src/features/**
+alwaysApply: false
+---
+
+# Design System Rules
+
+**Before creating ANY component, search `src/components/ui` for an existing reusable
+solution.** Creating a one-off variant of an existing primitive is a bug.
+
+## Shared Primitives (use these, never re-implement)
+
+- **Typography** — heading/text components and Tailwind text scale; no ad-hoc font
+  sizes.
+- **Spacing** — Tailwind spacing scale only; no arbitrary pixel values.
+- **Cards** — `Card`, `CardHeader`, `CardContent` for all panel surfaces.
+- **Forms** — `Input`, `Select`, `Textarea`, `Field` (label + error) wired to React
+  Hook Form + Zod. Every form uses `useForm` with a `zodResolver` and a shared schema.
+- **Tables** — `Table` primitives for all tabular data (availability, tenants,
+  contacts, documents).
+- **Modals** — the shared `Modal`/`Dialog` system for all overlays; never hand-roll a
+  fixed-position overlay.
+- **Buttons & Badges** — shared variants (`primary | secondary | ghost | danger`,
+  status badges).
+- **Map components** — shared map preview/embed components in `src/features/maps`;
+  never instantiate the Maps SDK directly in a page.
+- **Canvas components** — shared canvas/editor building blocks live in
+  `src/features/site-plan-studio`; tools are registry plugins, not bespoke handlers.
+
+## Conventions
+
+- `cn()` (clsx + tailwind-merge) for conditional classes.
+- Variants via explicit prop unions, not boolean prop explosions.
+- Components are presentational; data fetching lives in feature hooks (React Query).

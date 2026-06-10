@@ -1,0 +1,37 @@
+---
+description: Site Plan Studio invariants - immutable originals, editable vector annotations
+globs: src/features/site-plan-studio/**,src/server/services/sitePlan*,src/app/api/site-plans/**,src/app/api/site-plan-pages/**
+alwaysApply: false
+---
+
+# Site Plan Studio Rules
+
+Think: **Figma + Canva + Commercial Real Estate.**
+
+## Invariants
+
+1. **Site plans are first-class entities** (`SitePlan` → `SitePlanPage` →
+   `AnnotationLayer` → `Annotation`).
+2. **The original PDF is NEVER modified.** It is stored immutably as an `Asset`;
+   pages are rasterized copies used as locked canvas backgrounds.
+3. **Annotations are stored separately** from the original document as typed vector
+   data (`geometry`/`style`/`label` JSON) — never flattened pixels, never baked into
+   images until an explicit export.
+4. **Every shape remains editable.** Any operation that would destroy editability
+   (rasterizing a layer, merging into an image) is forbidden outside export.
+5. **Layers are supported everywhere** — new annotation features must respect layer
+   order, visibility, and lock state.
+6. **Version history via `AnnotationSnapshot`** — significant operations should be
+   snapshot-able; restore must fully reconstruct editor state.
+7. **Reusable overlays** — exports become `Asset`s consumed by the Marketing Engine;
+   nothing is exported to a dead-end file.
+
+## Data Rules
+
+- Geometry uses **normalized 0–1 coordinates** relative to page dimensions. Never
+  store pixel coordinates.
+- Space shapes bind to `Space` records via `Annotation.spaceId`; labels derive values
+  through `label.binding` (e.g. `{value} SF`) — never copy record values into label
+  text.
+- New tools are **registry plugins** implementing the shared tool interface; never add
+  tool logic to the editor core or stage component.

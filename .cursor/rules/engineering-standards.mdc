@@ -1,0 +1,43 @@
+---
+description: Engineering standards - TypeScript strict, production-ready, no hacks
+alwaysApply: true
+---
+
+# Engineering Standards
+
+## TypeScript
+
+- `strict: true` always. No `any` — use precise types, generics, or `unknown` with
+  narrowing.
+- JSON columns are typed at the boundary with Zod schemas; never consume untyped JSON.
+- Zod schemas are the single source of validation, shared between React Hook Form
+  resolvers and API route handlers.
+
+## Production-Ready Only
+
+- No temporary hacks, no `// TODO: fix later` shortcuts, no commented-out code.
+- Handle the failure paths that can actually happen (external providers, file uploads,
+  job failures) — surface them as typed API errors, not silent catches.
+- Every API response uses the `{ data }` / `{ error: { code, message } }` envelope.
+
+## Structure
+
+- Feature-based folders (`src/features/*`); services own business logic
+  (`src/server/services`); see `architecture.mdc` for layering.
+- No duplicated business logic — extract to the service or `src/lib`.
+- One Prisma model per concept; no parallel data shapes.
+
+## Components
+
+- Reuse `src/components/ui` primitives (see `design-system.mdc`).
+- Server Components by default; `"use client"` only where interactivity requires it.
+- Data fetching via React Query hooks in `src/features/*/hooks`; mutations invalidate
+  affected queries.
+
+## Testing-Ready Patterns
+
+- Services are pure functions of (context, input) → result; they receive the org
+  context as an argument and are independently testable.
+- Providers are injected behind interfaces — tests can substitute fakes without
+  network access.
+- Keep route handlers thin enough that service tests cover the real logic.

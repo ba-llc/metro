@@ -1,0 +1,42 @@
+---
+description: System architecture, layering, and multi-tenancy rules
+alwaysApply: true
+---
+
+# Architecture Rules
+
+## Layering (strict)
+
+- `src/app` — routes only. Pages and route handlers validate (Zod), authorize
+  (`requireOrg()`), and delegate. **No business logic.**
+- `src/features/*` — feature-based domain UI (one folder per engine: properties,
+  site-plan-studio, maps, demographics, marketing, tenants). Components, hooks,
+  schemas.
+- `src/server/services` — all business logic. **The only layer that imports Prisma.**
+- `src/server/providers` — adapter interfaces + implementations for all third parties
+  (storage, maps, demographics, AI, PDF rendering). **No third-party SDK usage outside
+  this folder.**
+- `src/components/ui` — shared design system primitives.
+
+## Multi-Tenancy (mandatory)
+
+- Every tenant-owned table carries `organizationId`.
+- Services receive an org-scoped context and must filter **every** query by
+  `organizationId`. Never trust client-supplied IDs as a tenancy boundary — always
+  verify the row belongs to the caller's organization.
+
+## No Duplication
+
+- No duplicated business logic: if logic exists in a service, call the service.
+- No duplicated data models: one Prisma model per concept; shared Zod schemas between
+  client forms and API validation (`src/features/*/schemas`).
+- Before writing a utility, check `src/lib` for an existing one.
+
+## Extensibility
+
+- Heavy/long-running work goes through the `Job` table + `enqueue()` — never block a
+  request on rendering or external fetches.
+- Provider swaps (Google → ESRI, S3 → R2) must be configuration changes only. If a
+  change requires touching callers, the abstraction is wrong.
+
+See `docs/system-architecture.md`.

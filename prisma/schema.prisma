@@ -1,0 +1,537 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Supabase: pooled connection for the app, direct connection for migrations.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy & Identity
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  branding  Json     @default("{}")
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships  Membership[]
+  properties   Property[]
+  tenants      Tenant[]
+  contacts     Contact[]
+  templates    Template[]
+  assets       Asset[]
+  activityLogs ActivityLog[]
+  jobs         Job[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  BROKER
+  COORDINATOR
+  VIEWER
+}
+
+model Membership {
+  id             String     @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MemberRole @default(BROKER)
+  createdAt      DateTime   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// Property Core
+// ---------------------------------------------------------------------------
+
+enum PropertyType {
+  SHOPPING_CENTER
+  RETAIL
+  MIXED_USE
+  OFFICE
+  INDUSTRIAL
+  LAND
+}
+
+enum PropertyStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+model Property {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  propertyType   PropertyType   @default(SHOPPING_CENTER)
+  status         PropertyStatus @default(ACTIVE)
+  description    String?
+  totalGla       Int?
+  yearBuilt      Int?
+  parkingRatio   Float?
+  latitude       Float?
+  longitude      Float?
+  metadata       Json           @default("{}")
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  address      Address?
+  spaces       Space[]
+  sitePlans    SitePlan[]
+  occupancies  TenantOccupancy[]
+  contacts     PropertyContact[]
+  photos       Photo[]
+  mapAssets    MapAsset[]
+  trafficCounts TrafficCount[]
+  demographics DemographicDataset[]
+  documents    GeneratedDocument[]
+  activityLogs ActivityLog[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt])
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  propertyId String   @unique
+  street     String
+  city       String
+  state      String
+  zip        String
+  county     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+enum SpaceType {
+  INLINE
+  ENDCAP
+  PAD
+  ANCHOR
+  OUTPARCEL
+  OFFICE
+  FLEX
+}
+
+enum SpaceStatus {
+  AVAILABLE
+  LEASED
+  PENDING
+  NOT_AVAILABLE
+}
+
+model Space {
+  id             String      @id @default(cuid())
+  organizationId String
+  propertyId     String
+  suiteNumber    String
+  squareFootage  Int?
+  spaceType      SpaceType   @default(INLINE)
+  status         SpaceStatus @default(AVAILABLE)
+  askingRate     Decimal?    @db.Decimal(10, 2)
+  rateType       String?     // e.g. "NNN", "Gross", "FS"
+  notes          String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  annotations Annotation[]
+
+  @@index([organizationId, propertyId])
+}
+
+model Tenant {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  category       String?
+  website        String?
+  logoAssetId    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  logoAsset    Asset?            @relation(fields: [logoAssetId], references: [id])
+  occupancies  TenantOccupancy[]
+
+  @@index([organizationId, name])
+}
+
+model TenantOccupancy {
+  id            String    @id @default(cuid())
+  propertyId    String
+  tenantId      String
+  suiteNumber   String?
+  squareFootage Int?
+  isAnchor      Boolean   @default(false)
+  leaseExpiry   DateTime?
+  createdAt     DateTime  @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model Contact {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  title          String?
+  email          String?
+  phone          String?
+  license        String?
+  photoAssetId   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  photoAsset   Asset?            @relation(fields: [photoAssetId], references: [id])
+  properties   PropertyContact[]
+
+  @@index([organizationId])
+}
+
+model PropertyContact {
+  id         String @id @default(cuid())
+  propertyId String
+  contactId  String
+  sortOrder  Int    @default(0)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, contactId])
+}
+
+model Photo {
+  id         String   @id @default(cuid())
+  propertyId String
+  assetId    String
+  category   String?  // e.g. "hero", "exterior", "interior", "signage"
+  caption    String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  asset    Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+model TrafficCount {
+  id         String   @id @default(cuid())
+  propertyId String
+  roadName   String
+  count      Int
+  year       Int?
+  source     String?
+  latitude   Float?
+  longitude  Float?
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+// ---------------------------------------------------------------------------
+// Site Plan Studio
+// ---------------------------------------------------------------------------
+
+enum SitePlanStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model SitePlan {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  propertyId          String
+  title               String
+  originalAssetId     String         // immutable original PDF
+  latestExportAssetId String?        // most recent flattened export (PNG)
+  status              SitePlanStatus @default(PROCESSING)
+  pageCount           Int            @default(0)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  property          Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  originalAsset     Asset                @relation("SitePlanOriginal", fields: [originalAssetId], references: [id])
+  latestExportAsset Asset?               @relation("SitePlanExport", fields: [latestExportAssetId], references: [id])
+  pages             SitePlanPage[]
+  snapshots         AnnotationSnapshot[]
+
+  @@index([organizationId, propertyId])
+}
+
+model SitePlanPage {
+  id           String   @id @default(cuid())
+  sitePlanId   String
+  pageNumber   Int
+  imageAssetId String
+  width        Int
+  height       Int
+  createdAt    DateTime @default(now())
+
+  sitePlan   SitePlan          @relation(fields: [sitePlanId], references: [id], onDelete: Cascade)
+  imageAsset Asset             @relation(fields: [imageAssetId], references: [id])
+  layers     AnnotationLayer[]
+
+  @@unique([sitePlanId, pageNumber])
+}
+
+model AnnotationLayer {
+  id        String   @id @default(cuid())
+  pageId    String
+  name      String
+  sortOrder Int      @default(0)
+  visible   Boolean  @default(true)
+  locked    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  page        SitePlanPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  annotations Annotation[]
+
+  @@index([pageId, sortOrder])
+}
+
+model Annotation {
+  id        String   @id @default(cuid())
+  layerId   String
+  type      String   // rectangle | polygon | parcel-boundary | pad-site | dashed-outline | arrow | dimension | suite-label | sqft-label | parking-label | callout | tenant-logo | directional-indicator
+  geometry  Json     // normalized 0-1 coordinates
+  style     Json     @default("{}")
+  label     Json?
+  spaceId   String?
+  assetId   String?  // tenant logo image
+  zIndex    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  layer AnnotationLayer @relation(fields: [layerId], references: [id], onDelete: Cascade)
+  space Space?          @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  asset Asset?          @relation(fields: [assetId], references: [id])
+
+  @@index([layerId])
+}
+
+model AnnotationSnapshot {
+  id          String   @id @default(cuid())
+  sitePlanId  String
+  name        String
+  state       Json     // full layers + annotations state
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  sitePlan SitePlan @relation(fields: [sitePlanId], references: [id], onDelete: Cascade)
+
+  @@index([sitePlanId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Maps & Demographics
+// ---------------------------------------------------------------------------
+
+enum MapKind {
+  SATELLITE_AERIAL
+  TRADE_AREA
+  RADIUS
+  RETAIL
+}
+
+enum ArtifactStatus {
+  QUEUED
+  RENDERING
+  READY
+  FAILED
+}
+
+model MapAsset {
+  id           String         @id @default(cuid())
+  propertyId   String
+  kind         MapKind
+  params       Json           // declarative generation spec
+  status       ArtifactStatus @default(QUEUED)
+  imageAssetId String?
+  provider     String         @default("google")
+  error        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  imageAsset Asset?   @relation(fields: [imageAssetId], references: [id])
+
+  @@index([propertyId, kind])
+}
+
+enum GeographyType {
+  RADIUS
+  DRIVE_TIME
+  POLYGON
+}
+
+model DemographicDataset {
+  id              String        @id @default(cuid())
+  propertyId      String
+  provider        String
+  geographyType   GeographyType @default(RADIUS)
+  geographyParams Json          // e.g. { radiusMiles: 3 }
+  metrics         Json          // population, households, avgIncome, ...
+  asOfDate        DateTime?
+  createdAt       DateTime      @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+// ---------------------------------------------------------------------------
+// Marketing
+// ---------------------------------------------------------------------------
+
+enum TemplateChannel {
+  FLYER
+  BROCHURE
+  OM
+  EMAIL
+  SOCIAL
+  WEBSITE
+}
+
+model Template {
+  id             String          @id @default(cuid())
+  organizationId String?         // null = system template
+  name           String
+  channel        TemplateChannel
+  theme          Json            @default("{}") // brand tokens
+  pages          Json            @default("[]") // ordered block definitions
+  isSystem       Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    GeneratedDocument[]
+
+  @@index([organizationId, channel])
+}
+
+model GeneratedDocument {
+  id            String          @id @default(cuid())
+  propertyId    String
+  templateId    String
+  channel       TemplateChannel
+  status        ArtifactStatus  @default(QUEUED)
+  dataSnapshot  Json?           // exact resolved data used for the render
+  outputAssetId String?
+  error         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  template    Template @relation(fields: [templateId], references: [id])
+  outputAsset Asset?   @relation(fields: [outputAssetId], references: [id])
+
+  @@index([propertyId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// System
+// ---------------------------------------------------------------------------
+
+model Asset {
+  id             String   @id @default(cuid())
+  organizationId String
+  storageKey     String   @unique
+  filename       String
+  mime           String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  checksum       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  photos            Photo[]
+  tenants           Tenant[]
+  contacts          Contact[]
+  sitePlanOriginals SitePlan[]          @relation("SitePlanOriginal")
+  sitePlanExports   SitePlan[]          @relation("SitePlanExport")
+  sitePlanPages     SitePlanPage[]
+  annotations       Annotation[]
+  mapAssets         MapAsset[]
+  documents         GeneratedDocument[]
+
+  @@index([organizationId])
+}
+
+model ActivityLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  propertyId     String?
+  actorId        String?
+  entityType     String
+  entityId       String
+  action         String
+  detail         Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  property     Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, propertyId, createdAt])
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  organizationId String
+  type           String    // map.generate | document.render
+  payload        Json
+  status         JobStatus @default(PENDING)
+  attempts       Int       @default(0)
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
