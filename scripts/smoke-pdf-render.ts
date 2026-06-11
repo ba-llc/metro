@@ -69,6 +69,7 @@ const mockContext: RenderContext = {
     aerial: null,
     tradeArea: null,
     radius: null,
+    retail: null,
     sitePlan: null,
   },
   generatedContent: {},
