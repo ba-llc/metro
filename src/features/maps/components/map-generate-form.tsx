@@ -7,7 +7,10 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent,
+  type WheelEvent,
 } from "react";
+import { LocateFixed, Minus, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   CustomSelect,
@@ -53,6 +56,10 @@ const minConfigWidth = 360;
 const minPreviewWidth = 280;
 const resizeGutterWidth = 16;
 const resizeKeyboardStep = 24;
+const minManualZoom = 8;
+const maxManualZoom = 20;
+const earthCircumferenceMiles = 24901;
+const framingLatitudeCosine = 0.766;
 
 const mapKindOptions: readonly CustomSelectOption<MapCreateInput["kind"]>[] =
   mapKinds.map((value) => ({
@@ -92,6 +99,17 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function zoomLabel(zoom: number) {
+  if (zoom >= 18) return "Site close-up";
+  if (zoom >= 15) return "Parcel view";
+  if (zoom >= 13) return "Neighborhood";
+  return "Regional";
+}
+
+function milesPerMapPixel(zoom: number) {
+  return (earthCircumferenceMiles * framingLatitudeCosine) / (256 * 2 ** zoom);
+}
+
 export function MapGenerateForm({
   propertyId,
   loading,
@@ -121,7 +139,17 @@ export function MapGenerateForm({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [configWidth, setConfigWidth] = useState(defaultConfigWidth);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const layoutRef = useRef<HTMLDivElement | null>(null);
+  const dragStartRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    previewWidth: number;
+    previewHeight: number;
+    startNorth: number;
+    startEast: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!initialInput) return;
@@ -240,6 +268,89 @@ export function MapGenerateForm({
     onSubmit(buildInput());
   }
 
+  const currentZoom = params.zoom ?? defaultMapParams(kind).zoom ?? 12;
+  const manualZoom = clamp(currentZoom, minManualZoom, maxManualZoom);
+
+  function setManualZoom(nextZoom: number) {
+    patch({
+      autoZoom: false,
+      zoom: clamp(Math.round(nextZoom), minManualZoom, maxManualZoom),
+    });
+  }
+
+  function resetViewport() {
+    patch({
+      autoZoom: usesAutoZoom(kind) ? true : false,
+      zoom: defaultMapParams(kind).zoom,
+      centerOffsetNorthMiles: 0,
+      centerOffsetEastMiles: 0,
+    });
+  }
+
+  function fitViewport() {
+    patch({
+      autoZoom: usesAutoZoom(kind) ? true : false,
+      centerOffsetNorthMiles: 0,
+      centerOffsetEastMiles: 0,
+    });
+  }
+
+  function startPreviewDrag(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    dragStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      previewWidth: rect.width,
+      previewHeight: rect.height,
+      startNorth: params.centerOffsetNorthMiles ?? 0,
+      startEast: params.centerOffsetEastMiles ?? 0,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragOffset({ x: 0, y: 0 });
+  }
+
+  function movePreviewDrag(event: PointerEvent<HTMLDivElement>) {
+    const start = dragStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    setDragOffset({
+      x: event.clientX - start.x,
+      y: event.clientY - start.y,
+    });
+  }
+
+  function endPreviewDrag(event: PointerEvent<HTMLDivElement>) {
+    const start = dragStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    dragStartRef.current = null;
+    setDragOffset({ x: 0, y: 0 });
+    if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+
+    const size =
+      mapSizePresets.find((p) => p.id === sizePreset) ?? mapSizePresets[0];
+    const mapDx = dx * (size.width / Math.max(1, start.previewWidth));
+    const mapDy = dy * (size.height / Math.max(1, start.previewHeight));
+    const milesPerPixel = milesPerMapPixel(manualZoom);
+    patch({
+      autoZoom: false,
+      centerOffsetEastMiles: Number(
+        (start.startEast - mapDx * milesPerPixel).toFixed(3),
+      ),
+      centerOffsetNorthMiles: Number(
+        (start.startNorth + mapDy * milesPerPixel).toFixed(3),
+      ),
+      zoom: manualZoom,
+    });
+  }
+
+  function handlePreviewWheel(event: WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setManualZoom(manualZoom + (event.deltaY < 0 ? 1 : -1));
+  }
+
   const showManualZoom = !usesAutoZoom(kind) || params.autoZoom === false;
   const maxConfigWidth =
     layoutRef.current?.clientWidth != null
@@ -261,7 +372,7 @@ export function MapGenerateForm({
       containerWidth - resizeGutterWidth - minPreviewWidth,
     );
 
-    const onMove = (event: PointerEvent) => {
+    const onMove = (event: globalThis.PointerEvent) => {
       setConfigWidth(
         clamp(
           startConfigWidth + event.clientX - startX,
@@ -372,45 +483,68 @@ export function MapGenerateForm({
             </label>
           ) : null}
 
-          {showManualZoom ? (
-            <div>
-              <Field label={`Zoom level (${params.zoom ?? 12})`}>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-slate-800">
+                  {showManualZoom ? zoomLabel(manualZoom) : "Auto fit"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Drag the preview to pan. Scroll or use +/- to zoom.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  title="Zoom out"
+                  className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  onClick={() => setManualZoom(manualZoom - 1)}
+                >
+                  <Minus className="size-4" />
+                </button>
+                <span className="min-w-8 text-center text-xs font-semibold text-slate-600">
+                  {manualZoom}
+                </span>
+                <button
+                  type="button"
+                  title="Zoom in"
+                  className="inline-flex size-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  onClick={() => setManualZoom(manualZoom + 1)}
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            </div>
+
+            {showManualZoom ? (
+              <Field label="Zoom level">
                 <input
                   type="range"
-                  min={8}
-                  max={20}
-                  value={params.zoom ?? 12}
-                  onChange={(e) => patch({ zoom: Number(e.target.value) })}
+                  min={minManualZoom}
+                  max={maxManualZoom}
+                  value={manualZoom}
+                  onChange={(e) => setManualZoom(Number(e.target.value))}
                   className="w-full"
                 />
               </Field>
-              <p className="mt-1 text-xs text-slate-500">
-                8 = regional · 14 = neighborhood · 18 = site close-up
-              </p>
-            </div>
-          ) : null}
+            ) : null}
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Pan north (mi)">
-              <Input
-                type="number"
-                step="0.1"
-                value={params.centerOffsetNorthMiles ?? 0}
-                onChange={(e) =>
-                  patch({ centerOffsetNorthMiles: Number(e.target.value) })
-                }
-              />
-            </Field>
-            <Field label="Pan east (mi)">
-              <Input
-                type="number"
-                step="0.1"
-                value={params.centerOffsetEastMiles ?? 0}
-                onChange={(e) =>
-                  patch({ centerOffsetEastMiles: Number(e.target.value) })
-                }
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant="secondary" onClick={fitViewport}>
+                <LocateFixed className="size-4" />
+                Fit Property
+              </Button>
+              <Button type="button" variant="secondary" onClick={resetViewport}>
+                <RotateCcw className="size-4" />
+                Reset View
+              </Button>
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+              Center offset: {(params.centerOffsetNorthMiles ?? 0).toFixed(2)} mi N,
+              {" "}
+              {(params.centerOffsetEastMiles ?? 0).toFixed(2)} mi E
+            </div>
           </div>
 
           <CustomSelect
@@ -584,13 +718,25 @@ export function MapGenerateForm({
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
           Live preview
         </p>
-        <div className="relative aspect-4/3 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+        <div
+          className="relative aspect-4/3 touch-none overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+          onPointerDown={startPreviewDrag}
+          onPointerMove={movePreviewDrag}
+          onPointerUp={endPreviewDrag}
+          onPointerCancel={endPreviewDrag}
+          onWheel={handlePreviewWheel}
+        >
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
               alt="Map preview"
-              className="size-full object-cover"
+              draggable={false}
+              className="size-full cursor-grab select-none object-cover active:cursor-grabbing"
+              style={{
+                transform: `translate(${dragOffset.x}px, ${dragOffset.y}px) scale(${dragStartRef.current ? 1.02 : 1})`,
+                transition: dragStartRef.current ? "none" : "transform 150ms ease",
+              }}
             />
           ) : previewLoading ? (
             <MapPreviewSkeleton />
@@ -604,6 +750,45 @@ export function MapGenerateForm({
               <Skeleton className="size-full rounded-md" />
             </div>
           ) : null}
+          <div className="absolute left-3 top-3 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+            <button
+              type="button"
+              title="Zoom in"
+              className="flex size-9 items-center justify-center text-slate-700 hover:bg-slate-50"
+              onClick={(event) => {
+                event.stopPropagation();
+                setManualZoom(manualZoom + 1);
+              }}
+            >
+              <Plus className="size-4" />
+            </button>
+            <div className="h-px bg-slate-200" />
+            <button
+              type="button"
+              title="Zoom out"
+              className="flex size-9 items-center justify-center text-slate-700 hover:bg-slate-50"
+              onClick={(event) => {
+                event.stopPropagation();
+                setManualZoom(manualZoom - 1);
+              }}
+            >
+              <Minus className="size-4" />
+            </button>
+          </div>
+          <button
+            type="button"
+            title="Fit property"
+            className="absolute bottom-3 left-3 flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+            onClick={(event) => {
+              event.stopPropagation();
+              fitViewport();
+            }}
+          >
+            <LocateFixed className="size-4" />
+          </button>
+          <div className="pointer-events-none absolute left-1/2 top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/90 shadow-[0_0_0_1px_rgba(15,23,42,0.35)]">
+            <div className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_0_1px_rgba(15,23,42,0.45)]" />
+          </div>
         </div>
         <p className="text-xs text-slate-500">
           Lower resolution than final output. Retail maps may show fewer POI
