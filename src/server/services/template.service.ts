@@ -13,6 +13,21 @@ export const systemTemplates: {
   pages: { block: string; title?: string }[];
 }[] = [
   {
+    name: "Metro Commercial Premium Leasing Package",
+    channel: "BROCHURE",
+    theme: metroCommercialTheme,
+    pages: [
+      { block: "premium-cover" },
+      { block: "premium-overview" },
+      { block: "premium-aerial" },
+      { block: "premium-site-plan" },
+      { block: "premium-market" },
+      { block: "premium-demographics" },
+      { block: "premium-tenants" },
+      { block: "premium-contacts" },
+    ],
+  },
+  {
     name: "Metro Commercial Leasing Flyer",
     channel: "FLYER",
     theme: metroCommercialTheme,
@@ -25,18 +40,6 @@ export const systemTemplates: {
       { block: "demographics", title: "Demographics" },
       { block: "tenant-roster", title: "Tenant Roster" },
       { block: "contacts", title: "Leasing Contacts" },
-    ],
-  },
-  {
-    name: "Metro Commercial Property Brochure",
-    channel: "BROCHURE",
-    theme: metroCommercialTheme,
-    pages: [
-      { block: "cover" },
-      { block: "aerial", title: "Property Overview" },
-      { block: "site-plan", title: "Site Plan" },
-      { block: "tenant-roster", title: "Co-Tenancy" },
-      { block: "contacts", title: "Contacts" },
     ],
   },
   {
@@ -69,8 +72,32 @@ function themeIsEmpty(theme: unknown): boolean {
   );
 }
 
+const retiredSystemTemplateNames = ["Metro Commercial Property Brochure"];
+
+async function retireRemovedSystemTemplates(): Promise<void> {
+  for (const name of retiredSystemTemplateNames) {
+    const templates = await db.template.findMany({
+      where: { isSystem: true, name },
+      select: { id: true, _count: { select: { documents: true } } },
+    });
+
+    for (const template of templates) {
+      if (template._count.documents === 0) {
+        await db.template.delete({ where: { id: template.id } });
+      } else {
+        await db.template.update({
+          where: { id: template.id },
+          data: { isSystem: false },
+        });
+      }
+    }
+  }
+}
+
 /** Idempotently ensures the system templates exist (also run by seed). */
 export async function ensureSystemTemplates(): Promise<void> {
+  await retireRemovedSystemTemplates();
+
   for (const t of systemTemplates) {
     const existing = await db.template.findFirst({
       where: { isSystem: true, name: t.name },

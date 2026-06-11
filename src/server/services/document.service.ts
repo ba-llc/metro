@@ -175,11 +175,14 @@ export async function listDocuments(
   const channels = channelOrder
     .filter((channel) => channelsWithDocs.has(channel))
     .map((channel) => {
-      const versions = enriched.filter(
-        (d) => d.channel === channel && d.status === "READY" && d.outputAssetId,
-      );
+      const versions = enriched
+        .filter((d) => d.channel === channel)
+        .sort((a, b) => b.versionNumber - a.versionNumber);
       const latestId = latestByChannel.get(channel) ?? null;
       const live = isLiveChannel(channel);
+      const latestReady = versions.find(
+        (d) => d.status === "READY" && d.outputAssetId,
+      );
       return {
         channel,
         label: CHANNEL_LABELS[channel],
@@ -188,7 +191,7 @@ export async function listDocuments(
           : null,
         latestDocumentId: latestId,
         isLive: live,
-        versions: live ? versions.slice(0, 1) : versions,
+        versions: live && latestReady ? [latestReady] : versions,
       };
     });
 
@@ -260,6 +263,38 @@ export async function createDocument(
 export async function deleteDocument(ctx: OrgContext, documentId: string) {
   const doc = await getDocument(ctx, documentId);
   await db.generatedDocument.delete({ where: { id: doc.id } });
+}
+
+/** Re-queues a failed or stuck document for rendering. */
+export async function retryDocument(ctx: OrgContext, documentId: string) {
+  const doc = await getDocument(ctx, documentId);
+  if (doc.status === "READY") {
+    throw new ApiError(
+      "VALIDATION",
+      "This document already rendered. Generate a new version instead.",
+    );
+  }
+  if (doc.status === "RENDERING") {
+    throw new ApiError(
+      "VALIDATION",
+      "This document is already rendering.",
+    );
+  }
+
+  await db.generatedDocument.update({
+    where: { id: doc.id },
+    data: { status: "QUEUED", error: null },
+  });
+  await enqueueJob(ctx, "document.render", { documentId: doc.id });
+  await logActivity(ctx, {
+    propertyId: doc.propertyId,
+    entityType: "document",
+    entityId: doc.id,
+    action: "retried",
+    detail: { channel: doc.channel, versionNumber: doc.versionNumber },
+  });
+
+  return doc;
 }
 
 /** Hydrates every image asset referenced by the context into data URIs. */

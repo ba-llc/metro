@@ -37,14 +37,25 @@ export const annotationStyleSchema = z.object({
   dash: z.array(z.number()).optional(),
   fontSize: z.number().optional(),
   color: z.string().optional(),
+  labelFill: z.string().optional(),
+  labelFillOpacity: z.number().min(0).max(1).optional(),
+  labelColor: z.string().optional(),
 });
 
 export const annotationLabelSchema = z.object({
   text: z.string().optional(),
+  placement: z
+    .enum(["below", "above", "left", "right", "overlay"])
+    .optional(),
   binding: z
     .object({
       entity: z.literal("space"),
-      field: z.enum(["suiteNumber", "squareFootage", "askingRate"]),
+      field: z.enum([
+        "suiteNumber",
+        "squareFootage",
+        "suiteAndSquareFootage",
+        "askingRate",
+      ]),
       format: z.string().optional(),
     })
     .optional(),

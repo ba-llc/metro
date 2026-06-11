@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { EmptyState, Spinner } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { DiscoverResultsSkeleton } from "@/components/ui/skeleton";
 import { labelize } from "@/lib/utils";
 import {
   useDiscoverNearbyTenants,
@@ -150,7 +151,7 @@ export function TenantDiscoverModal({ open, onClose, propertyId, geocoded }: Pro
           ) : null}
 
           {discover.isPending ? (
-            <Spinner label="Searching Google Places..." />
+            <DiscoverResultsSkeleton count={5} />
           ) : results.length === 0 ? (
             <EmptyState
               title="No results yet"

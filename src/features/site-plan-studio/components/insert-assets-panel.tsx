@@ -53,21 +53,53 @@ export function InsertAssetsPanel({
   activeToolId: string;
   onInsert: (toolId: string) => void;
 }) {
-  const items = itemsForTool(activeToolId);
-  if (items.length === 0) return null;
-
-  const title =
-    shapeTools.includes(activeToolId as (typeof shapeTools)[number])
-      ? "Shapes"
-      : lineTools.includes(activeToolId as (typeof lineTools)[number])
-        ? "Lines"
-        : "Text";
+  if (!isOverlayTool(activeToolId)) return null;
 
   return (
     <StudioPanel
-      title={title}
+      title="Add Overlay"
       description="Choose an item to add to the current page."
     >
+      <div className="space-y-5">
+        <ToolGroup
+          title="Shapes"
+          items={shapeTools}
+          activeToolId={activeToolId}
+          onInsert={onInsert}
+        />
+        <ToolGroup
+          title="Lines"
+          items={lineTools}
+          activeToolId={activeToolId}
+          onInsert={onInsert}
+        />
+        <ToolGroup
+          title="Text"
+          items={textTools}
+          activeToolId={activeToolId}
+          onInsert={onInsert}
+        />
+      </div>
+    </StudioPanel>
+  );
+}
+
+function ToolGroup({
+  title,
+  items,
+  activeToolId,
+  onInsert,
+}: {
+  title: string;
+  items: readonly string[];
+  activeToolId: string;
+  onInsert: (toolId: string) => void;
+}) {
+  return (
+    <section>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
       <div className="grid grid-cols-2 gap-3">
         {items.map((toolId) => {
           const tool = getTool(toolId);
@@ -94,19 +126,14 @@ export function InsertAssetsPanel({
           );
         })}
       </div>
-    </StudioPanel>
+    </section>
   );
 }
 
-function itemsForTool(activeToolId: string): string[] {
-  if (shapeTools.includes(activeToolId as (typeof shapeTools)[number])) {
-    return [...shapeTools];
-  }
-  if (lineTools.includes(activeToolId as (typeof lineTools)[number])) {
-    return [...lineTools];
-  }
-  if (textTools.includes(activeToolId as (typeof textTools)[number])) {
-    return [...textTools];
-  }
-  return [];
+function isOverlayTool(activeToolId: string): boolean {
+  return (
+    shapeTools.includes(activeToolId as (typeof shapeTools)[number]) ||
+    lineTools.includes(activeToolId as (typeof lineTools)[number]) ||
+    textTools.includes(activeToolId as (typeof textTools)[number])
+  );
 }

@@ -46,6 +46,13 @@ export function AppSidebar({
     if (stored === "true") setCollapsed(true);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--app-sidebar-width",
+      collapsed ? "4rem" : "15rem",
+    );
+  }, [collapsed]);
+
   const toggleCollapsed = () => {
     setCollapsed((value) => {
       const next = !value;

@@ -2,6 +2,16 @@ import React, { type ReactElement } from "react";
 import { formatRate, formatSF, formatTraffic, formatCurrency, labelize } from "@/lib/utils";
 import type { TemplateTheme } from "@/features/marketing/schemas";
 import type { RenderContext, RenderImages } from "./types";
+import {
+  PremiumAerialBlock,
+  PremiumContactsBlock,
+  PremiumCoverBlock,
+  PremiumDemographicsBlock,
+  PremiumMarketBlock,
+  PremiumOverviewBlock,
+  PremiumSitePlanBlock,
+  PremiumTenantsBlock,
+} from "./premiumBlocks";
 
 export type BlockProps = {
   theme: TemplateTheme;
@@ -274,4 +284,12 @@ export const blockComponents: Record<string, (props: BlockProps) => ReactElement
   demographics: DemographicsBlock,
   "tenant-roster": TenantRosterBlock,
   contacts: ContactsBlock,
+  "premium-cover": PremiumCoverBlock,
+  "premium-overview": PremiumOverviewBlock,
+  "premium-aerial": PremiumAerialBlock,
+  "premium-site-plan": PremiumSitePlanBlock,
+  "premium-market": PremiumMarketBlock,
+  "premium-demographics": PremiumDemographicsBlock,
+  "premium-tenants": PremiumTenantsBlock,
+  "premium-contacts": PremiumContactsBlock,
 };

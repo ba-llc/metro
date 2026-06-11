@@ -16,6 +16,14 @@ const RING_COLORS: readonly [string, ...string[]] = [
   "0xdc2626ff",
 ];
 const MARKER_COLORS = ["blue", "green", "red", "orange", "purple"];
+const MARKER_COLOR_CSS: Record<string, string> = {
+  red: "#dc2626",
+  blue: "#1d4ed8",
+  green: "#059669",
+  orange: "#ea580c",
+  purple: "#9333ea",
+};
+const PLACE_NAME_MAX_LENGTH = 22;
 const STATIC_MAP_TILE_SIZE = 256;
 const RADIUS_LABEL_BEARING_DEGREES = 45;
 
@@ -31,6 +39,12 @@ export type MapRenderResult = {
 };
 
 type RadiusRingLabel = {
+  position: LatLng;
+  text: string;
+  color: string;
+};
+
+type PlaceLabel = {
   position: LatLng;
   text: string;
   color: string;
@@ -89,6 +103,16 @@ function staticMapPixel(
 function ringColorToCss(color: string): string {
   const match = /^0x([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?$/.exec(color);
   return match ? `#${match[1]}` : color;
+}
+
+function markerColorToCss(color: string): string {
+  return MARKER_COLOR_CSS[color] ?? color;
+}
+
+function truncatePlaceName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= PLACE_NAME_MAX_LENGTH) return trimmed;
+  return `${trimmed.slice(0, PLACE_NAME_MAX_LENGTH)}…`;
 }
 
 function escapeSvgText(value: string): string {
@@ -154,6 +178,61 @@ async function addRadiusLabels(
   return sharp(body).composite([{ input: overlay }]).png().toBuffer();
 }
 
+async function addPlaceLabels(
+  body: Buffer,
+  labels: PlaceLabel[],
+  center: LatLng,
+  zoom: number,
+  width: number,
+  height: number,
+  scale: 1 | 2,
+): Promise<Buffer> {
+  if (labels.length === 0) return body;
+
+  const outputWidth = width * scale;
+  const outputHeight = height * scale;
+  const fontSize = 11 * scale;
+  const paddingX = 6 * scale;
+  const paddingY = 3 * scale;
+  const margin = 8 * scale;
+  const gap = 6 * scale;
+  const borderRadius = 5 * scale;
+
+  const elements = labels.map((label) => {
+    const anchor = staticMapPixel(label.position, center, zoom, width, height, scale);
+    const text = escapeSvgText(label.text);
+    const boxWidth = text.length * fontSize * 0.58 + paddingX * 2;
+    const boxHeight = fontSize + paddingY * 2;
+    const placeRight = anchor.x + gap + boxWidth <= outputWidth - margin;
+    const x = Math.min(
+      Math.max(placeRight ? anchor.x + gap : anchor.x - gap - boxWidth, margin),
+      outputWidth - boxWidth - margin,
+    );
+    const y = Math.min(
+      Math.max(anchor.y - boxHeight / 2, margin),
+      outputHeight - boxHeight - margin,
+    );
+    const lineEndX = placeRight ? x : x + boxWidth;
+    const lineY = y + boxHeight / 2;
+    const color = markerColorToCss(label.color);
+
+    return `
+      <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="white" stroke-width="${4 * scale}" stroke-linecap="round" opacity="0.9" />
+      <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${color}" stroke-width="${1.5 * scale}" stroke-linecap="round" opacity="0.9" />
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${boxWidth.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${borderRadius}" fill="white" fill-opacity="0.92" stroke="${color}" stroke-width="${1.5 * scale}" />
+      <text x="${(x + paddingX).toFixed(1)}" y="${(y + boxHeight / 2).toFixed(1)}" dominant-baseline="middle" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="600">${text}</text>
+    `;
+  });
+
+  const overlay = Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="${outputWidth}" height="${outputHeight}" viewBox="0 0 ${outputWidth} ${outputHeight}">
+      ${elements.join("\n")}
+    </svg>
+  `);
+
+  return sharp(body).composite([{ input: overlay }]).png().toBuffer();
+}
+
 /** Renders a static map PNG from a declarative spec (preview or final output). */
 export async function renderMapPng(
   kind: MapKind,
@@ -172,6 +251,7 @@ export async function renderMapPng(
   const markers: StaticMapMarker[] = [];
   const paths: StaticMapPath[] = [];
   const radiusRingLabels: RadiusRingLabel[] = [];
+  const placeLabels: PlaceLabel[] = [];
   let mapType: "roadmap" | "satellite" | "hybrid" | "terrain" = "roadmap";
   let zoom = params.zoom ?? 12;
   let resolvedPlaces: Place[] = [];
@@ -258,28 +338,52 @@ export async function renderMapPng(
       ]);
 
       const seen = new Set<string>();
-      const poiMarkers: StaticMapMarker[] = [];
+      const poiEntries: Array<{
+        marker: StaticMapMarker;
+        place: Place;
+        color: string;
+      }> = [];
       searches.forEach((places, i) => {
+        const color = MARKER_COLORS[i % MARKER_COLORS.length] ?? "blue";
         for (const place of places) {
           const key = `${place.position.lat},${place.position.lng}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          resolvedPlaces.push(place);
-          poiMarkers.push({
-            position: place.position,
-            color: MARKER_COLORS[i % MARKER_COLORS.length],
-            size: "small",
+          poiEntries.push({
+            place,
+            color,
+            marker: {
+              position: place.position,
+              color,
+              size: "small",
+            },
           });
         }
       });
-      resolvedPlaces = resolvedPlaces.slice(0, maxMarkers);
-      markers.push(...poiMarkers.slice(0, maxMarkers));
+      const limitedEntries = poiEntries.slice(0, maxMarkers);
+      resolvedPlaces = limitedEntries.map((entry) => entry.place);
+      markers.push(...limitedEntries.map((entry) => entry.marker));
+      if (params.showPlaceLabels !== false) {
+        for (const entry of limitedEntries) {
+          placeLabels.push({
+            position: entry.place.position,
+            text: truncatePlaceName(entry.place.name),
+            color: entry.color,
+          });
+        }
+      }
       if (markers.length > 41) markers.length = 41;
       break;
     }
   }
 
   if (params.mapType) mapType = params.mapType;
+  if (mapType === "satellite" || mapType === "hybrid") {
+    mapType =
+      params.showStreetLabels ?? params.mapType === "hybrid"
+        ? "hybrid"
+        : "satellite";
+  }
 
   const width = params.width ?? 640;
   const height = params.height ?? 480;
@@ -304,6 +408,15 @@ export async function renderMapPng(
   body = await addRadiusLabels(
     body,
     radiusRingLabels,
+    viewCenter,
+    zoom,
+    width,
+    height,
+    scale,
+  );
+  body = await addPlaceLabels(
+    body,
+    placeLabels,
     viewCenter,
     zoom,
     width,

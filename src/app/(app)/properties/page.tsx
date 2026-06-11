@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { EmptyState, Spinner } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { PropertyGridSkeleton } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 import { labelize } from "@/lib/utils";
 import { PropertyForm } from "@/features/properties/components/property-form";
@@ -19,7 +20,7 @@ import { propertyTypes } from "@/features/properties/schemas";
 
 export default function PropertiesPage() {
   return (
-    <Suspense fallback={<Spinner label="Loading properties..." />}>
+    <Suspense fallback={<PropertyGridSkeleton count={6} />}>
       <PropertiesPageInner />
     </Suspense>
   );
@@ -64,7 +65,7 @@ function PropertiesPageInner() {
       </div>
 
       {isLoading ? (
-        <Spinner label="Loading properties..." />
+        <PropertyGridSkeleton count={6} />
       ) : !properties || properties.length === 0 ? (
         <EmptyState
           title="No properties yet"

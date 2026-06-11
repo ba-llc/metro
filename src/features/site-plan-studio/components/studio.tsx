@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Spinner } from "@/components/ui/empty-state";
+import { StudioSkeleton } from "@/components/ui/skeleton";
 import { assetUrl, uploadAsset } from "@/lib/api";
 import { formatDate, formatRate } from "@/lib/utils";
 import type { AnnotationData } from "@/types/annotations";
@@ -70,6 +70,7 @@ export function Studio({
   const [logoPlacementRequest, setLogoPlacementRequest] = useState<{
     id: number;
     assetId: string;
+    tenantName?: string;
   } | null>(null);
   const [toolInsertRequest, setToolInsertRequest] = useState<{
     id: number;
@@ -113,6 +114,13 @@ export function Studio({
   const spaces = property?.spaces ?? [];
   const occupancies: OccupancyRecord[] = property?.occupancies ?? [];
   const logoOptions = logoOptionsFromOccupancies(occupancies);
+  const logoLabelsByAssetId = Object.fromEntries(
+    logoOptions
+      .filter((logo): logo is typeof logo & { assetId: string } =>
+        Boolean(logo.assetId),
+      )
+      .map((logo) => [logo.assetId, logo.tenantName]),
+  );
 
   // Load page state into the store when the page changes (not on every save refetch).
   const loadedPageRef = useRef<string | null>(null);
@@ -167,7 +175,9 @@ export function Studio({
               ? space.suiteNumber
               : binding.field === "squareFootage"
                 ? (space.squareFootage?.toLocaleString("en-US") ?? "—")
-                : formatRate(space.askingRate, space.rateType);
+                : binding.field === "suiteAndSquareFootage"
+                  ? `Suite ${space.suiteNumber}\n${space.squareFootage?.toLocaleString("en-US") ?? "—"} SF`
+                  : formatRate(space.askingRate, space.rateType);
           return (binding.format ?? "{value}").replace("{value}", raw);
         }
       }
@@ -331,7 +341,7 @@ export function Studio({
   }
 
   if (isLoading || !plan || !page) {
-    return <Spinner label="Loading studio..." />;
+    return <StudioSkeleton />;
   }
 
   return (
@@ -391,8 +401,8 @@ export function Studio({
         ) : activeToolId === "tenant-logo" ? (
           <LogoAssetsPanel
             logos={logoOptions}
-            onPlaceLogo={(assetId) =>
-              setLogoPlacementRequest({ id: Date.now(), assetId })
+            onPlaceLogo={(assetId, tenantName) =>
+              setLogoPlacementRequest({ id: Date.now(), assetId, tenantName })
             }
           />
         ) : activeToolId === "directional-indicator" ? (
@@ -446,7 +456,7 @@ export function Studio({
               title="Layers"
               description="Organize overlays, lock review layers, and control visibility."
             >
-              <LayersPanel />
+              <LayersPanel assetLabelsById={logoLabelsByAssetId} />
             </StudioPanel>
           ) : (
             <StudioPanel

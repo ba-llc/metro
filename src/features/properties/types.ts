@@ -19,6 +19,8 @@ export type PropertyListItem = {
   updatedAt: string;
   address: AddressRecord | null;
   photos: { assetId: string }[];
+  coverAssetId: string | null;
+  coverSource: "sitePlan" | "photo" | null;
   _count: { spaces: number; sitePlans: number; documents: number };
 };
 

@@ -9,12 +9,6 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import {
-  Controller,
-  type Control,
-  type FieldPath,
-  type FieldValues,
-} from "react-hook-form";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +41,8 @@ const menuViewportPadding = 8;
 const menuGap = 4;
 const minMenuHeight = 160;
 const maxMenuHeight = 320;
+/** Horizontal chrome: menu padding, option padding, check icon, and gap. */
+const optionRowChromePx = 56;
 
 function clampMenuHeight(value: number) {
   return Math.min(Math.max(value, minMenuHeight), maxMenuHeight);
@@ -66,6 +62,9 @@ export function CustomSelect<Value extends string>({
   const id = useId();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<HTMLSpanElement | null>(null);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [position, setPosition] = useState<MenuPosition | null>(null);
@@ -106,20 +105,38 @@ export function CustomSelect<Value extends string>({
             window.innerHeight - menuViewportPadding - maxHeight,
           );
 
-      const maxLeft = window.innerWidth - menuViewportPadding - rect.width;
+      let contentWidth = rect.width;
+      const measure = measureRef.current;
+      if (measure) {
+        let widestLabel = 0;
+        for (const option of optionsRef.current) {
+          measure.textContent = option.label;
+          widestLabel = Math.max(
+            widestLabel,
+            measure.getBoundingClientRect().width,
+          );
+        }
+        contentWidth = Math.max(
+          rect.width,
+          Math.ceil(widestLabel + optionRowChromePx),
+        );
+      }
+
+      const maxLeft = window.innerWidth - menuViewportPadding - contentWidth;
 
       setPosition({
         top,
         left: Math.max(menuViewportPadding, Math.min(rect.left, maxLeft)),
-        width: rect.width,
+        width: contentWidth,
         maxHeight,
       });
     }
 
-    updatePosition();
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
@@ -226,7 +243,7 @@ export function CustomSelect<Value extends string>({
             id={listboxId}
             role="listbox"
             aria-labelledby={label ? labelId : undefined}
-            className="fixed z-50 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-900 shadow-lg ring-1 ring-slate-900/5"
+            className="fixed z-50 rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-900 shadow-md"
             style={{
               top: position.top,
               left: position.left,
@@ -234,7 +251,7 @@ export function CustomSelect<Value extends string>({
               maxHeight: position.maxHeight,
             }}
           >
-            <div className="max-h-[inherit] overflow-y-auto p-1">
+            <div className="flex max-h-[inherit] flex-col gap-1 overflow-y-auto overscroll-contain rounded-lg p-1">
               {options.map((option, index) => {
                 const selected = option.value === value;
                 const active = index === activeIndex;
@@ -258,10 +275,10 @@ export function CustomSelect<Value extends string>({
                     )}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => selectOption(option)}
-	                  >
-	                    <span className="min-w-0 flex-1 truncate">
-	                      {renderOption ? renderOption(option) : option.label}
-	                    </span>
+                  >
+                    <span className="min-w-0 flex-1 whitespace-nowrap">
+                      {renderOption ? renderOption(option) : option.label}
+                    </span>
                     {selected ? (
                       <svg
                         viewBox="0 0 24 24"
@@ -287,6 +304,11 @@ export function CustomSelect<Value extends string>({
 
   return (
     <div className={cn("block", className)}>
+      <span
+        ref={measureRef}
+        aria-hidden
+        className="pointer-events-none invisible fixed top-0 -left-[9999px] whitespace-nowrap text-sm"
+      />
       {label ? (
         <span
           id={labelId}
@@ -306,18 +328,18 @@ export function CustomSelect<Value extends string>({
         aria-labelledby={triggerLabelledBy}
         disabled={disabled}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 shadow-sm transition-colors",
+          "flex h-10 w-full items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 transition-colors",
           "focus:border-brand-700 focus:outline-none focus:ring-1 focus:ring-brand-700",
           "disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400",
-          open ? "border-brand-700 ring-1 ring-brand-700" : "",
+          open ? "border-brand-700" : "",
           triggerClassName,
         )}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={handleKeyDown}
-	      >
-	        <span id={`${id}-value`} className="min-w-0 flex-1 truncate">
-	          {renderValue ? renderValue(selectedOption) : (selectedOption?.label ?? "")}
-	        </span>
+      >
+        <span id={`${id}-value`} className="min-w-0 flex-1 truncate">
+          {renderValue ? renderValue(selectedOption) : (selectedOption?.label ?? "")}
+        </span>
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -336,46 +358,5 @@ export function CustomSelect<Value extends string>({
       </button>
       {menu}
     </div>
-  );
-}
-
-/** React Hook Form bridge — use inside `Field` (Field supplies the visible label). */
-export function ControlledSelect<
-  TFieldValues extends FieldValues,
-  TValue extends string = string,
->({
-  name,
-  control,
-  options,
-  disabled,
-  className,
-  triggerClassName,
-  parse,
-}: {
-  name: FieldPath<TFieldValues>;
-  control: Control<TFieldValues>;
-  options: readonly CustomSelectOption<TValue>[];
-  disabled?: boolean;
-  className?: string;
-  triggerClassName?: string;
-  parse?: (value: TValue) => unknown;
-}) {
-  return (
-    <Controller
-      name={name}
-      control={control}
-      render={({ field }) => (
-        <CustomSelect
-          value={(field.value == null ? "" : String(field.value)) as TValue}
-          options={options}
-          onValueChange={(value) =>
-            field.onChange(parse ? parse(value) : value)
-          }
-          disabled={disabled}
-          className={className}
-          triggerClassName={triggerClassName}
-        />
-      )}
-    />
   );
 }

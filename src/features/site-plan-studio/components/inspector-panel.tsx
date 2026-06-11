@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   CircleDot,
   Link2,
@@ -8,6 +8,7 @@ import {
   Paintbrush,
   Scissors,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +45,7 @@ export function InspectorPanel({
   const [newSuite, setNewSuite] = useState("");
   const [newSf, setNewSf] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoUploadRef = useRef<HTMLInputElement>(null);
 
   const selected = annotations.find((a) => a.id === selectedId);
 
@@ -77,6 +79,7 @@ export function InspectorPanel({
   }
 
   const isText = textAnnotationTypes.includes(selected.type);
+  const isDimension = selected.type === "dimension";
   const isBindable = spaceBindableTypes.includes(selected.type);
   const boundSpace = spaces.find((s) => s.id === selected.spaceId);
   const rosterLogoOptions = occupancies
@@ -132,10 +135,15 @@ export function InspectorPanel({
       : 1;
   }
 
-  async function applyLogoAsset(assetId: string | null) {
+  async function applyLogoAsset(assetId: string | null, tenantName?: string) {
     if (!selected) return;
     if (!assetId || !selected.geometry.rect) {
-      updateAnnotation(selected.id, { assetId });
+      updateAnnotation(selected.id, {
+        assetId,
+        ...(tenantName && selected.label?.text
+          ? { label: { ...selected.label, text: tenantName } }
+          : {}),
+      });
       return;
     }
     const aspect = await logoAspect(assetId).catch(() => 1);
@@ -148,6 +156,9 @@ export function InspectorPanel({
         : { w: maxSide * aspect, h: maxSide };
     updateAnnotation(selected.id, {
       assetId,
+      ...(tenantName && selected.label?.text
+        ? { label: { ...selected.label, text: tenantName } }
+        : {}),
       geometry: {
         ...selected.geometry,
         rect: {
@@ -275,6 +286,10 @@ export function InspectorPanel({
                     value: `squareFootage:${s.id}`,
                     label: `Suite ${s.suiteNumber} - square footage`,
                   },
+                  {
+                    value: `suiteAndSquareFootage:${s.id}`,
+                    label: `Suite ${s.suiteNumber} - suite + square footage`,
+                  },
                 ] satisfies CustomSelectOption<string>[]),
               ]}
               onValueChange={(v) => {
@@ -291,7 +306,11 @@ export function InspectorPanel({
                   label: {
                     binding: {
                       entity: "space",
-                      field: field as "suiteNumber" | "squareFootage" | "askingRate",
+                      field: field as
+                        | "suiteNumber"
+                        | "squareFootage"
+                        | "suiteAndSquareFootage"
+                        | "askingRate",
                       format:
                         field === "squareFootage"
                           ? "{value} SF"
@@ -307,64 +326,11 @@ export function InspectorPanel({
         ) : null}
       </InspectorSection>
 
-      <InspectorSection icon={<Paintbrush className="size-4" />} title="Style">
-        <div className="grid grid-cols-2 gap-3">
-          {selected.style.fill !== undefined || isBindable ? (
-            <Field label="Fill">
-              <Input
-                type="color"
-                className="h-9 p-1"
-                value={selected.style.fill ?? "#2563eb"}
-                onChange={(e) => patchStyle({ fill: e.target.value })}
-              />
-            </Field>
-          ) : null}
-          {!isText ? (
-            <Field label="Stroke">
-              <Input
-                type="color"
-                className="h-9 p-1"
-                value={selected.style.stroke ?? "#2563eb"}
-                onChange={(e) => patchStyle({ stroke: e.target.value })}
-              />
-            </Field>
-          ) : null}
-          {!isText ? (
-            <Field label="Fill opacity">
-              <Input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={selected.style.fillOpacity ?? 0.25}
-                onChange={(e) => patchStyle({ fillOpacity: Number(e.target.value) })}
-              />
-            </Field>
-          ) : null}
-          {!isText ? (
-            <Field label="Stroke width">
-              <Input
-                type="number"
-                min={0}
-                max={20}
-                value={selected.style.strokeWidth ?? 2}
-                onChange={(e) => patchStyle({ strokeWidth: Number(e.target.value) })}
-              />
-            </Field>
-          ) : null}
-          {isText ? (
-            <Field label="Font size">
-              <Input
-                type="number"
-                min={8}
-                max={72}
-                value={selected.style.fontSize ?? 16}
-                onChange={(e) => patchStyle({ fontSize: Number(e.target.value) })}
-              />
-            </Field>
-          ) : null}
-          {isText ? (
-            <Field label="Color">
+      {selected.type !== "tenant-logo" ? (
+        <InspectorSection icon={<Paintbrush className="size-4" />} title="Style">
+          <div className="grid grid-cols-2 gap-3">
+            {isText ? (
+            <Field label="Text color">
               <Input
                 type="color"
                 className="h-9 p-1"
@@ -373,8 +339,110 @@ export function InspectorPanel({
               />
             </Field>
           ) : null}
-        </div>
-      </InspectorSection>
+          {isText ? (
+            <Field label="Text background">
+              <Input
+                type="color"
+                className="h-9 p-1"
+                value={selected.style.fill ?? "#ffffff"}
+                onChange={(e) =>
+                  patchStyle({
+                    fill: e.target.value,
+                    fillOpacity: selected.style.fillOpacity ?? 0.85,
+                  })
+                }
+              />
+            </Field>
+          ) : null}
+          {!isText && (selected.style.fill !== undefined || isBindable || isDimension) ? (
+            <Field label={isDimension ? "Label background" : "Fill"}>
+              <Input
+                type="color"
+                className="h-9 p-1"
+                value={selected.style.fill ?? (isDimension ? "#ffffff" : "#2563eb")}
+                onChange={(e) =>
+                  patchStyle({
+                    fill: e.target.value,
+                    fillOpacity:
+                      selected.style.fillOpacity ?? (isDimension ? 0.85 : 0.25),
+                  })
+                }
+              />
+            </Field>
+          ) : null}
+          {!isText || isDimension ? (
+            <Field label={isDimension ? "Line color" : "Stroke"}>
+              <Input
+                type="color"
+                className="h-9 p-1"
+                value={selected.style.stroke ?? (isDimension ? "#475569" : "#2563eb")}
+                onChange={(e) => patchStyle({ stroke: e.target.value })}
+              />
+            </Field>
+          ) : null}
+          {!isText || isDimension || selected.style.fill !== undefined ? (
+            <div className="col-span-2">
+              <Field
+                label={
+                  isDimension || isText ? "Background opacity" : "Fill opacity"
+                }
+              >
+                <SliderControl
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={
+                    selected.style.fillOpacity ??
+                    (isDimension || isText ? 0.85 : 0.25)
+                  }
+                  format={(value) => value.toFixed(2)}
+                  onChange={(value) => patchStyle({ fillOpacity: value })}
+                />
+              </Field>
+            </div>
+          ) : null}
+          {isText ? <div /> : null}
+          {!isText || isDimension ? (
+            <div className="col-span-2">
+              <Field label={isDimension ? "Line width" : "Stroke width"}>
+                <SliderControl
+                  min={0}
+                  max={20}
+                  step={0.5}
+                  value={selected.style.strokeWidth ?? (isDimension ? 1.5 : 2)}
+                  format={(value) =>
+                    Number.isInteger(value) ? String(value) : value.toFixed(1)
+                  }
+                  onChange={(value) => patchStyle({ strokeWidth: value })}
+                />
+              </Field>
+            </div>
+          ) : null}
+          {isText ? (
+            <div className="col-span-2">
+              <Field label="Font size">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={8}
+                    max={96}
+                    step={1}
+                    value={selected.style.fontSize ?? 16}
+                    onChange={(e) =>
+                      patchStyle({ fontSize: Number(e.target.value) })
+                    }
+                    className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-brand-700"
+                  />
+                  <span className="w-12 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-center text-xs font-semibold text-slate-700">
+                    {selected.style.fontSize ?? 16}
+                  </span>
+                </div>
+              </Field>
+            </div>
+          ) : null}
+          </div>
+        </InspectorSection>
+      ) : null}
 
       {selected.type === "tenant-logo" ? (
         <InspectorSection icon={<Paintbrush className="size-4" />} title="Logo Image">
@@ -385,7 +453,10 @@ export function InspectorPanel({
               options={rosterLogoSelectOptions}
               onValueChange={(value) => {
                 const rosterLogo = rosterLogoByValue.get(value);
-                void applyLogoAsset(rosterLogo?.logoAssetId ?? null);
+                void applyLogoAsset(
+                  rosterLogo?.logoAssetId ?? null,
+                  rosterLogo?.tenantName,
+                );
               }}
               triggerClassName="h-12"
               renderValue={(option) =>
@@ -407,42 +478,261 @@ export function InspectorPanel({
           ) : (
             <p className="text-sm text-slate-500">
               No Tenant Roster logos are available yet. Add or approve tenant logos
-              from the Tenant Roster, or upload a logo below.
+              from the Tenant Roster, or upload a custom logo below.
             </p>
           )}
           {selected.assetId ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="w-fit max-w-full rounded-xl border border-slate-200 bg-slate-50 p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={assetUrl(selected.assetId)}
                 alt="Selected tenant logo"
-                className="max-h-16 max-w-full object-contain"
+                className="block h-auto w-auto max-h-24 max-w-full object-contain"
               />
             </div>
           ) : null}
-          <Field label="Upload custom logo">
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Style
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Background">
+                <div className="space-y-2">
+                  <Input
+                    type="color"
+                    className="h-9 p-1"
+                    value={selected.style.fill ?? "#ffffff"}
+                    onChange={(event) =>
+                      patchStyle({
+                        fill: event.target.value,
+                        fillOpacity: selected.style.fillOpacity ?? 0.85,
+                      })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={selected.style.fill ? "secondary" : "ghost"}
+                    className="w-full"
+                    onClick={() =>
+                      patchStyle({
+                        fill: undefined,
+                        fillOpacity: undefined,
+                      })
+                    }
+                    disabled={!selected.style.fill}
+                  >
+                    No background
+                  </Button>
+                </div>
+              </Field>
+              <Field label="Border">
+                <div className="space-y-2">
+                  <Input
+                    type="color"
+                    className="h-9 p-1"
+                    value={selected.style.stroke ?? "#0f3057"}
+                    onChange={(event) =>
+                      patchStyle({
+                        stroke: event.target.value,
+                        strokeWidth: selected.style.strokeWidth ?? 2,
+                      })
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={
+                      selected.style.stroke || selected.style.strokeWidth
+                        ? "secondary"
+                        : "ghost"
+                    }
+                    className="w-full"
+                    onClick={() =>
+                      patchStyle({
+                        stroke: undefined,
+                        strokeWidth: undefined,
+                      })
+                    }
+                    disabled={!selected.style.stroke && !selected.style.strokeWidth}
+                  >
+                    No border
+                  </Button>
+                </div>
+              </Field>
+            </div>
+            {selected.style.fill ? (
+              <Field label="Background opacity">
+                <SliderControl
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={selected.style.fillOpacity ?? 0.85}
+                  format={(value) => value.toFixed(2)}
+                  onChange={(value) => patchStyle({ fillOpacity: value })}
+                />
+              </Field>
+            ) : (
+              <p className="rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
+                No logo background is applied.
+              </p>
+            )}
+            {selected.style.stroke || selected.style.strokeWidth ? (
+              <Field label="Border width">
+                <SliderControl
+                  min={0}
+                  max={16}
+                  step={0.5}
+                  value={selected.style.strokeWidth ?? 0}
+                  format={(value) =>
+                    Number.isInteger(value) ? String(value) : value.toFixed(1)
+                  }
+                  onChange={(value) =>
+                    patchStyle({
+                      strokeWidth: value,
+                      stroke:
+                        value > 0
+                          ? selected.style.stroke ?? "#0f3057"
+                          : selected.style.stroke,
+                    })
+                  }
+                />
+              </Field>
+            ) : null}
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
             <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              disabled={uploadingLogo}
-              className="block w-full text-xs text-slate-500"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setUploadingLogo(true);
-                try {
-                  const asset = await uploadAsset({
-                    file,
-                    filename: file.name,
-                    folder: `properties/${propertyId}/logos`,
+              type="checkbox"
+              checked={Boolean(selected.label?.text)}
+              onChange={(event) => {
+                if (event.target.checked) {
+                  updateAnnotation(selected.id, {
+                    label: {
+                      text:
+                        selected.label?.text ??
+                        selectedRosterLogo?.tenantName ??
+                        "Tenant name",
+                    },
+                    style: {
+                      ...selected.style,
+                      fontSize: selected.style.fontSize ?? 18,
+                      labelColor: selected.style.labelColor ?? selected.style.color ?? "#0f172a",
+                      labelFill: selected.style.labelFill ?? "#ffffff",
+                      labelFillOpacity: selected.style.labelFillOpacity ?? 0.85,
+                    },
                   });
-                  await applyLogoAsset(asset.id);
-                } finally {
-                  setUploadingLogo(false);
+                } else {
+                  updateAnnotation(selected.id, { label: null });
                 }
               }}
             />
-          </Field>
+            Show tenant name
+          </label>
+          {selected.label?.text ? (
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <Field label="Tenant name">
+                <Input
+                  value={selected.label.text}
+                  onChange={(event) =>
+                    updateAnnotation(selected.id, {
+                      label: { ...selected.label, text: event.target.value },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Badge position">
+                <CustomSelect
+                  value={selected.label.placement ?? "below"}
+                  options={[
+                    { value: "below", label: "Below logo" },
+                    { value: "above", label: "Above logo" },
+                    { value: "left", label: "Left of logo" },
+                    { value: "right", label: "Right of logo" },
+                    { value: "overlay", label: "Overlay on logo" },
+                  ]}
+                  onValueChange={(placement) =>
+                    updateAnnotation(selected.id, {
+                      label: { ...selected.label, placement },
+                    })
+                  }
+                />
+              </Field>
+              <Field label="Size">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={8}
+                    max={72}
+                    step={1}
+                    value={selected.style.fontSize ?? 18}
+                    onChange={(event) =>
+                      patchStyle({ fontSize: Number(event.target.value) })
+                    }
+                    className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-brand-700"
+                  />
+                  <span className="w-12 rounded-md border border-slate-200 bg-white px-2 py-1 text-center text-xs font-semibold text-slate-700">
+                    {selected.style.fontSize ?? 18}
+                  </span>
+                </div>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Color">
+                  <Input
+                    type="color"
+                    className="h-9 p-1"
+                    value={selected.style.labelColor ?? selected.style.color ?? "#0f172a"}
+                    onChange={(event) => patchStyle({ labelColor: event.target.value })}
+                  />
+                </Field>
+                <Field label="Background">
+                  <Input
+                    type="color"
+                    className="h-9 p-1"
+                    value={selected.style.labelFill ?? "#ffffff"}
+                    onChange={(event) =>
+                      patchStyle({
+                        labelFill: event.target.value,
+                        labelFillOpacity: selected.style.labelFillOpacity ?? 0.85,
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+          ) : null}
+          <input
+            ref={logoUploadRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploadingLogo(true);
+              try {
+                const asset = await uploadAsset({
+                  file,
+                  filename: file.name,
+                  folder: `properties/${propertyId}/logos`,
+                });
+                await applyLogoAsset(asset.id);
+              } finally {
+                setUploadingLogo(false);
+                if (logoUploadRef.current) logoUploadRef.current.value = "";
+              }
+            }}
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="w-full"
+            loading={uploadingLogo}
+            onClick={() => logoUploadRef.current?.click()}
+          >
+            <Upload className="size-3.5" />
+            Upload custom logo
+          </Button>
         </InspectorSection>
       ) : null}
 
@@ -558,6 +848,39 @@ function RosterLogoSelectRow({
         {muted ? " - no logo" : ""}
       </span>
     </span>
+  );
+}
+
+function SliderControl({
+  min,
+  max,
+  step,
+  value,
+  format,
+  onChange,
+}: {
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-2 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-slate-200 accent-brand-700"
+      />
+      <span className="w-14 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-center text-xs font-semibold text-slate-700">
+        {format(value)}
+      </span>
+    </div>
   );
 }
 

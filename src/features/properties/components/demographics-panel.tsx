@@ -6,7 +6,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
-import { ControlledSelect } from "@/components/ui/custom-select";
+import { ControlledSelect } from "@/components/ui/controlled-select";
 import { Field } from "@/components/ui/field";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";

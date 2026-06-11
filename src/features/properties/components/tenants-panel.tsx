@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
+import { FormattedIntegerInput } from "@/components/ui/formatted-number-input";
 import { Field } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { occupancyCreateSchema, type OccupancyCreateInput } from "../schemas";
@@ -31,6 +32,7 @@ export function TenantsPanel({
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -100,7 +102,18 @@ export function TenantsPanel({
               <Input {...register("suiteNumber")} />
             </Field>
             <Field label="Square footage">
-              <Input type="number" {...register("squareFootage")} />
+              <Controller
+                name="squareFootage"
+                control={control}
+                render={({ field }) => (
+                  <FormattedIntegerInput
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    onBlur={field.onBlur}
+                    placeholder="2,400"
+                  />
+                )}
+              />
             </Field>
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">

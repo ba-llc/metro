@@ -15,21 +15,32 @@ export type PropertyCardData = {
   updatedAt: string | Date;
   address: { street: string; city: string; state: string } | null;
   photos?: { assetId: string }[];
+  coverAssetId?: string | null;
+  coverSource?: "sitePlan" | "photo" | null;
   _count: { spaces: number; sitePlans: number; documents: number };
 };
 
 export function PropertyCard({ property }: { property: PropertyCardData }) {
-  const photo = property.photos?.[0];
+  const coverAssetId =
+    property.coverAssetId ?? property.photos?.[0]?.assetId ?? null;
+  const coverSource =
+    property.coverSource ??
+    (property.photos?.[0] ? "photo" : null);
+  const isSitePlanCover = coverSource === "sitePlan";
 
   return (
     <Link href={`/properties/${property.id}`} className="group block h-full">
       <Card className="flex h-full flex-col overflow-hidden transition-shadow group-hover:shadow-md">
-        {photo ? (
+        {coverAssetId ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={assetUrl(photo.assetId)}
+            src={assetUrl(coverAssetId)}
             alt={property.name}
-            className="h-28 w-full border-b border-slate-100 object-cover"
+            className={
+              isSitePlanCover
+                ? "h-28 w-full border-b border-slate-100 bg-slate-50 object-contain p-2"
+                : "h-28 w-full border-b border-slate-100 object-cover"
+            }
           />
         ) : (
           <div className="flex h-28 w-full items-center justify-center border-b border-slate-100 bg-gradient-to-br from-slate-50 to-slate-100">

@@ -38,7 +38,7 @@ async function main() {
     data: {
       name: "Metro Commercial",
       slug: "metro-commercial",
-      branding: { primaryColor: "#0f3057", accentColor: "#e25822" },
+      branding: { primaryColor: "#0f3057", accentColor: "#1e93b2" },
     },
   });
 

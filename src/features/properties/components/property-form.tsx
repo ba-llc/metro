@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   propertyCreateSchema,
@@ -11,11 +11,20 @@ import {
 } from "../schemas";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { ControlledSelect } from "@/components/ui/custom-select";
+import { FormattedIntegerInput } from "@/components/ui/formatted-number-input";
+import { ControlledSelect } from "@/components/ui/controlled-select";
 import { Field } from "@/components/ui/field";
 import { labelize } from "@/lib/utils";
 import { usePropertyPlaceSearch } from "../hooks";
 import type { DiscoveredPlaceRecord } from "../types";
+
+const yearBuiltOptions = [
+  { value: "", label: "Select year" },
+  ...Array.from({ length: new Date().getFullYear() + 1 - 1800 + 1 }, (_, index) => {
+    const year = new Date().getFullYear() + 1 - index;
+    return { value: String(year), label: String(year) };
+  }),
+];
 
 function componentText(
   place: DiscoveredPlaceRecord,
@@ -244,13 +253,33 @@ export function PropertyForm({
 
       <div className="grid grid-cols-3 gap-4">
         <Field label="Total GLA (SF)" error={errors.totalGla?.message}>
-          <Input type="number" {...register("totalGla")} />
+          <Controller
+            name="totalGla"
+            control={control}
+            render={({ field }) => (
+              <FormattedIntegerInput
+                value={field.value}
+                onValueChange={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="125,000"
+              />
+            )}
+          />
         </Field>
         <Field label="Year built" error={errors.yearBuilt?.message}>
-          <Input type="number" {...register("yearBuilt")} />
+          <ControlledSelect
+            name="yearBuilt"
+            control={control}
+            options={yearBuiltOptions}
+            parse={(value) => (value ? Number(value) : undefined)}
+          />
         </Field>
         <Field label="Parking ratio" error={errors.parkingRatio?.message}>
-          <Input type="number" step="0.1" placeholder="5.0" {...register("parkingRatio")} />
+          <Input
+            inputMode="decimal"
+            placeholder="5.0"
+            {...register("parkingRatio")}
+          />
         </Field>
       </div>
 

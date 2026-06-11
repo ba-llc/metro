@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input, Textarea } from "@/components/ui/input";
-import { ControlledSelect } from "@/components/ui/custom-select";
+import { FormattedIntegerInput } from "@/components/ui/formatted-number-input";
+import { ControlledSelect } from "@/components/ui/controlled-select";
 import { Field } from "@/components/ui/field";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
@@ -50,7 +51,18 @@ function SpaceForm({
           <Input placeholder="101" {...register("suiteNumber")} />
         </Field>
         <Field label="Square footage" error={errors.squareFootage?.message}>
-          <Input type="number" placeholder="2400" {...register("squareFootage")} />
+          <Controller
+            name="squareFootage"
+            control={control}
+            render={({ field }) => (
+              <FormattedIntegerInput
+                value={field.value}
+                onValueChange={field.onChange}
+                onBlur={field.onBlur}
+                placeholder="2,400"
+              />
+            )}
+          />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">

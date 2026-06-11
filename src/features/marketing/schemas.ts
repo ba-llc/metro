@@ -18,13 +18,21 @@ export const blockTypes = [
   "demographics",
   "tenant-roster",
   "contacts",
+  "premium-cover",
+  "premium-overview",
+  "premium-aerial",
+  "premium-site-plan",
+  "premium-market",
+  "premium-demographics",
+  "premium-tenants",
+  "premium-contacts",
 ] as const;
 
 export type BlockType = (typeof blockTypes)[number];
 
 export const templateThemeSchema = z.object({
   primaryColor: z.string().default("#0f3057"),
-  accentColor: z.string().default("#e25822"),
+  accentColor: z.string().default("#1e93b2"),
   textColor: z.string().default("#1a1a2e"),
   fontFamily: z
     .string()

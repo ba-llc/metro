@@ -6,7 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState, Spinner } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
@@ -103,7 +104,7 @@ export default function ContactsPage() {
       />
 
       {isLoading ? (
-        <Spinner label="Loading contacts..." />
+        <TableSkeleton rows={6} columns={6} />
       ) : !contacts || contacts.length === 0 ? (
         <EmptyState
           title="No contacts yet"

@@ -8,7 +8,6 @@ import {
   type DragEvent,
 } from "react";
 import {
-  ChevronDown,
   LocateFixed,
   Minus,
   Move,
@@ -45,7 +44,7 @@ export function StudioCanvas({
   mode: StudioMode;
   logoDropEnabled: boolean;
   symbolDropEnabled: boolean;
-  logoPlacementRequest: { id: number; assetId: string } | null;
+  logoPlacementRequest: { id: number; assetId: string; tenantName?: string } | null;
   toolInsertRequest: { id: number; toolId: string } | null;
   symbolPlacementRequest: { id: number; text: string } | null;
 }) {
@@ -192,7 +191,7 @@ export function StudioCanvas({
       : 1;
   }
 
-  async function addLogoAt(assetId: string, center: Point) {
+  async function addLogoAt(assetId: string, center: Point, tenantName?: string) {
     const aspect = await imageAspect(assetId).catch(() => 1);
     const w = Math.min(0.12, Math.max(0.045, 0.07 * Math.min(aspect, 1.8)));
     const h = Math.min(0.12, Math.max(0.035, w / aspect));
@@ -208,7 +207,7 @@ export function StudioCanvas({
         },
       },
       style: {},
-      label: null,
+      label: tenantName ? { text: tenantName } : null,
       assetId,
     });
   }
@@ -222,14 +221,37 @@ export function StudioCanvas({
     });
   }
 
+  function screenPxToPageX(px: number, max = 0.35): number {
+    return Math.min(max, px / Math.max(1, pageW * scale));
+  }
+
+  function screenPxToPageY(px: number, max = 0.25): number {
+    return Math.min(max, px / Math.max(1, pageH * scale));
+  }
+
+  function insertedStyle(toolStyle: AnnotationData["style"]): AnnotationData["style"] {
+    return {
+      ...toolStyle,
+      fontSize:
+        toolStyle.fontSize == null
+          ? undefined
+          : Math.round(toolStyle.fontSize / Math.max(0.05, scale)),
+      strokeWidth:
+        toolStyle.strokeWidth == null
+          ? undefined
+          : toolStyle.strokeWidth / Math.max(0.05, scale),
+    };
+  }
+
   function addToolAt(toolId: string, center: Point) {
     const insertTool = getTool(toolId);
     const clamped = clampPoint(center);
     const type = insertTool.id as AnnotationData["type"];
+    const style = insertedStyle(insertTool.defaultStyle);
 
     if (insertTool.mode === "drag-rect") {
-      const w = type === "pad-site" ? 0.14 : 0.12;
-      const h = type === "pad-site" ? 0.09 : 0.075;
+      const w = screenPxToPageX(type === "pad-site" ? 220 : 190);
+      const h = screenPxToPageY(type === "pad-site" ? 140 : 120);
       addAnnotation({
         type,
         geometry: {
@@ -240,15 +262,15 @@ export function StudioCanvas({
             h,
           },
         },
-        style: insertTool.defaultStyle,
+        style,
         label: null,
       });
       return;
     }
 
     if (insertTool.mode === "polygon") {
-      const w = type === "parcel-boundary" ? 0.16 : 0.12;
-      const h = type === "parcel-boundary" ? 0.1 : 0.08;
+      const w = screenPxToPageX(type === "parcel-boundary" ? 240 : 190);
+      const h = screenPxToPageY(type === "parcel-boundary" ? 150 : 120);
       addAnnotation({
         type,
         geometry: {
@@ -259,14 +281,14 @@ export function StudioCanvas({
             clampPoint({ x: clamped.x - w / 2, y: clamped.y }),
           ],
         },
-        style: insertTool.defaultStyle,
+        style,
         label: null,
       });
       return;
     }
 
     if (insertTool.mode === "two-point") {
-      const dx = 0.07;
+      const dx = screenPxToPageX(type === "dimension" ? 110 : 90, 0.18);
       addAnnotation({
         type,
         geometry: {
@@ -275,7 +297,7 @@ export function StudioCanvas({
             clampPoint({ x: clamped.x + dx, y: clamped.y }),
           ],
         },
-        style: insertTool.defaultStyle,
+        style,
         label:
           type === "dimension"
             ? { text: insertTool.defaultText ?? "0'" }
@@ -289,7 +311,7 @@ export function StudioCanvas({
       addAnnotation({
         type,
         geometry: { points: [clamped] },
-        style: insertTool.defaultStyle,
+        style,
         label: { text: insertTool.defaultText ?? "Label" },
       });
     }
@@ -307,6 +329,7 @@ export function StudioCanvas({
         x: el.clientWidth / 2,
         y: el.clientHeight / 2,
       }),
+      logoPlacementRequest.tenantName,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logoPlacementRequest]);
@@ -326,7 +349,7 @@ export function StudioCanvas({
     addAnnotation({
       type: "directional-indicator",
       geometry: { points: [clamped] },
-      style: { fontSize: 26, color: "#0f172a" },
+      style: insertedStyle({ fontSize: 26, color: "#0f172a" }),
       label: { text },
     });
   }
@@ -510,7 +533,7 @@ export function StudioCanvas({
       addAnnotation({
         type: tool.id as AnnotationData["type"],
         geometry: { rect: { x, y, w, h } },
-        style: tool.defaultStyle,
+        style: insertedStyle(tool.defaultStyle),
         label: null,
       });
     } else if (tool.mode === "two-point") {
@@ -518,7 +541,7 @@ export function StudioCanvas({
       addAnnotation({
         type: tool.id as AnnotationData["type"],
         geometry: { points: [start, end] },
-        style: tool.defaultStyle,
+        style: insertedStyle(tool.defaultStyle),
         label:
           tool.id === "dimension" ? { text: tool.defaultText ?? "0'" } : null,
       });
@@ -552,7 +575,8 @@ export function StudioCanvas({
           y: event.clientY - rect.top,
         });
         if (assetId) {
-          void addLogoAt(assetId, point);
+          const tenantName = event.dataTransfer.getData("text/plain");
+          void addLogoAt(assetId, point, tenantName || undefined);
         } else if (symbol) {
           addSymbolAt(symbol, point);
         }
@@ -599,6 +623,8 @@ export function StudioCanvas({
                     annotation={a}
                     pageW={pageW}
                     pageH={pageH}
+                    zoom={zoom}
+                    selected={a.id === selectedId}
                     interactive={!layer.locked && tool.mode === "select"}
                     resolveLabel={resolveLabel}
                     onSelect={() => select(a.id)}
@@ -621,6 +647,8 @@ export function StudioCanvas({
                     annotation={a}
                     pageW={pageW}
                     pageH={pageH}
+                    zoom={zoom}
+                    selected={a.id === selectedId}
                     interactive={!layer.locked && tool.mode === "select"}
                     resolveLabel={resolveLabel}
                     onSelect={() => select(a.id)}
@@ -752,8 +780,7 @@ export function StudioCanvas({
 
       <div className="absolute right-4 top-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-500 shadow-lg backdrop-blur">
         <Move className={cn("size-4", panMode ? "text-brand-900" : "text-slate-400")} />
-        <span>Space + drag to pan</span>
-        <ChevronDown className="size-3 text-slate-400" />
+        <span>space + drag to pan</span>
       </div>
     </div>
   );

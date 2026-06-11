@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Badge, StatusBadge } from "@/components/ui/badge";
-import { Spinner } from "@/components/ui/empty-state";
+import { PropertyWorkspaceSkeleton } from "@/components/ui/skeleton";
 import { formatSF, labelize } from "@/lib/utils";
 import { PropertyNav } from "./property-nav";
 import { PropertyForm } from "./property-form";
@@ -57,11 +57,7 @@ export function PropertyWorkspaceShell({
   const geocode = useGeocodeProperty(propertyId);
 
   if (isLoading || !property) {
-    return (
-      <div className="mx-auto w-full max-w-6xl">
-        <Spinner label="Loading property..." />
-      </div>
-    );
+    return <PropertyWorkspaceSkeleton />;
   }
 
   const address = property.address

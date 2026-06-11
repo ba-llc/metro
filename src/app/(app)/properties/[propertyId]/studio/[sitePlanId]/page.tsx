@@ -2,14 +2,14 @@
 
 import { use } from "react";
 import dynamic from "next/dynamic";
-import { Spinner } from "@/components/ui/empty-state";
+import { StudioSkeleton } from "@/components/ui/skeleton";
 
 const Studio = dynamic(
   () =>
     import("@/features/site-plan-studio/components/studio").then(
       (m) => m.Studio,
     ),
-  { ssr: false, loading: () => <Spinner label="Loading studio..." /> },
+  { ssr: false, loading: () => <StudioSkeleton /> },
 );
 
 export default function PropertyStudioPage({

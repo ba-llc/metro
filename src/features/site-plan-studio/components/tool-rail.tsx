@@ -1,15 +1,13 @@
 "use client";
 
 import {
-  ArrowUpRight,
+  Building2,
   Hand,
-  Image,
   Layers2,
   MapPinned,
   MousePointer2,
   Navigation,
-  Square,
-  Type,
+  SquarePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { tools, type ToolDefinition } from "../tools";
@@ -17,10 +15,7 @@ import { tools, type ToolDefinition } from "../tools";
 const iconByTool: Record<string, React.ReactNode> = {
   select: <MousePointer2 className="size-5" />,
   pan: <Hand className="size-5" />,
-  rectangle: <Square className="size-5" />,
-  arrow: <ArrowUpRight className="size-5" />,
-  "suite-label": <Type className="size-5" />,
-  "tenant-logo": <Image className="size-5" />,
+  "tenant-logo": <Building2 className="size-5" />,
   "directional-indicator": <Navigation className="size-5" />,
 };
 
@@ -28,16 +23,23 @@ const primaryTools = new Set([
   "select",
   "pan",
   "rectangle",
-  "arrow",
-  "suite-label",
   "tenant-logo",
   "directional-indicator",
 ]);
 
-const railLabelByTool: Record<string, string> = {
-  rectangle: "Shapes",
-  "suite-label": "Text",
-};
+const overlayTools = new Set([
+  "rectangle",
+  "polygon",
+  "pad-site",
+  "parcel-boundary",
+  "dashed-outline",
+  "arrow",
+  "dimension",
+  "suite-label",
+  "sqft-label",
+  "parking-label",
+  "callout",
+]);
 
 export function ToolRail({
   activeToolId,
@@ -55,9 +57,40 @@ export function ToolRail({
   onMapsOpen?: () => void;
 }) {
   const visibleTools = tools.filter((tool) => primaryTools.has(tool.id));
+  const selectTool = visibleTools.find((tool) => tool.id === "select");
+  const panTool = visibleTools.find((tool) => tool.id === "pan");
+  const overlayTool = visibleTools.find((tool) => tool.id === "rectangle");
+  const imageTool = visibleTools.find((tool) => tool.id === "tenant-logo");
+  const otherTools = visibleTools.filter(
+    (tool) =>
+      tool.id !== "select" &&
+      tool.id !== "pan" &&
+      tool.id !== "rectangle" &&
+      tool.id !== "tenant-logo",
+  );
 
   return (
     <div className="flex h-full flex-col items-center gap-2 overflow-y-auto p-3">
+      {selectTool ? (
+        <ToolButton
+          label={`${selectTool.label}${selectTool.shortcut ? ` (${selectTool.shortcut})` : ""}`}
+          active={activeToolId === selectTool.id}
+          onClick={() => onToolChange(selectTool.id)}
+          shortcut={selectTool.shortcut}
+        >
+          {iconForTool(selectTool)}
+        </ToolButton>
+      ) : null}
+      {panTool ? (
+        <ToolButton
+          label={`${panTool.label}${panTool.shortcut ? ` (${panTool.shortcut})` : ""}`}
+          active={activeToolId === panTool.id}
+          onClick={() => onToolChange(panTool.id)}
+          shortcut={panTool.shortcut}
+        >
+          {iconForTool(panTool)}
+        </ToolButton>
+      ) : null}
       {onPagesOpen ? (
         <ToolButton
           label="Pages"
@@ -67,17 +100,6 @@ export function ToolRail({
           <Layers2 className="size-5" />
         </ToolButton>
       ) : null}
-      {visibleTools.map((tool) => (
-        <ToolButton
-          key={tool.id}
-          label={`${railLabelByTool[tool.id] ?? tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ""}`}
-          active={activeToolId === tool.id}
-          onClick={() => onToolChange(tool.id)}
-          shortcut={tool.shortcut}
-        >
-          {iconForTool(tool)}
-        </ToolButton>
-      ))}
       {onMapsOpen ? (
         <ToolButton
           label="Generated Maps"
@@ -87,6 +109,36 @@ export function ToolRail({
           <MapPinned className="size-5" />
         </ToolButton>
       ) : null}
+      {overlayTool ? (
+        <ToolButton
+          label="Add Overlay"
+          active={overlayTools.has(activeToolId)}
+          onClick={() => onToolChange(overlayTool.id)}
+        >
+          <SquarePlus className="size-5" />
+        </ToolButton>
+      ) : null}
+      {imageTool ? (
+        <ToolButton
+          label={`${imageTool.label}${imageTool.shortcut ? ` (${imageTool.shortcut})` : ""}`}
+          active={activeToolId === imageTool.id}
+          onClick={() => onToolChange(imageTool.id)}
+          shortcut={imageTool.shortcut}
+        >
+          {iconForTool(imageTool)}
+        </ToolButton>
+      ) : null}
+      {otherTools.map((tool) => (
+        <ToolButton
+          key={tool.id}
+          label={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ""}`}
+          active={activeToolId === tool.id}
+          onClick={() => onToolChange(tool.id)}
+          shortcut={tool.shortcut}
+        >
+          {iconForTool(tool)}
+        </ToolButton>
+      ))}
     </div>
   );
 }

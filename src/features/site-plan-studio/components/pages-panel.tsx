@@ -1,6 +1,7 @@
 "use client";
 
 import { FileImage, Trash2 } from "lucide-react";
+import { assetUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { SitePlanDetail } from "../types";
 import { StudioPanel } from "./studio-shell";
@@ -43,10 +44,14 @@ export function PagesPanel({
                 : "border-slate-200 bg-white hover:border-slate-300",
             )}
           >
-            <div className="relative h-20 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-              <div className="absolute inset-2 rounded border border-slate-300 bg-white" />
-              <div className="absolute left-4 top-5 h-8 w-10 rotate-[-8deg] rounded border border-slate-400" />
-              <div className="absolute bottom-3 right-3 h-5 w-8 rounded bg-orange-100 ring-1 ring-orange-300" />
+            <div className="relative h-20 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <img
+                src={assetUrl(page.imageAssetId)}
+                alt={`Page ${page.pageNumber} preview`}
+                className="h-full w-full object-cover"
+                draggable={false}
+                loading="lazy"
+              />
             </div>
             <div className="min-w-0 py-1">
               <div className="flex items-start justify-between gap-2">

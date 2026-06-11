@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/badge";
-import { EmptyState, Spinner } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  MediaCardGridSkeleton,
+  MediaPlaceholderSkeleton,
+} from "@/components/ui/skeleton";
 import { assetUrl } from "@/lib/api";
 import { formatDate, labelize } from "@/lib/utils";
 import {
@@ -107,7 +111,7 @@ export default function MapsPage({
       />
 
       {isLoading ? (
-        <Spinner label="Loading maps..." />
+        <MediaCardGridSkeleton count={3} />
       ) : !maps || maps.length === 0 ? (
         <EmptyState
           title="No maps generated yet"
@@ -143,7 +147,7 @@ export default function MapsPage({
                         {map.error ?? "Generation failed"}
                       </p>
                     ) : (
-                      <Spinner label="Generating..." />
+                      <MediaPlaceholderSkeleton />
                     )}
                   </div>
                 )}

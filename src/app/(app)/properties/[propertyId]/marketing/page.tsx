@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge, StatusBadge } from "@/components/ui/badge";
-import { EmptyState, Spinner } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  MarketingDocumentsSkeleton,
+  TemplateGridSkeleton,
+} from "@/components/ui/skeleton";
 import { cn, formatDate, labelize } from "@/lib/utils";
 import {
   PropertyTabSection,
@@ -15,6 +19,7 @@ import {
   useDeleteDocument,
   useDocuments,
   useGenerateDocument,
+  useRetryDocument,
   useTemplates,
   type ChannelShareGroup,
   type DocumentShareMeta,
@@ -140,18 +145,39 @@ function ShareLinkRow({
 
 function ChannelSharePanel({
   group,
-  orgSlug,
-  propertySlug,
   onDelete,
+  onRetry,
+  onGenerate,
+  deletePending,
+  retryPending,
 }: {
   group: ChannelShareGroup;
   orgSlug: string;
   propertySlug: string;
   onDelete: (id: string) => void;
+  onRetry: (id: string) => void;
+  onGenerate: (channel: string) => void;
+  deletePending: boolean;
+  retryPending: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
-  const latest = group.versions[0];
-  const showHistory = !group.isLive && group.versions.length > 0;
+  const latestReady = group.versions.find(
+    (doc) => doc.status === "READY" && doc.outputAssetId,
+  );
+  const latestAttempt = group.versions[0] ?? null;
+  const showHistory =
+    !group.isLive &&
+    group.versions.some((doc) => doc.status === "READY" && doc.outputAssetId);
+
+  function confirmDelete(documentId: string) {
+    if (
+      confirm(
+        "Delete this document attempt? You can generate a new one afterward.",
+      )
+    ) {
+      onDelete(documentId);
+    }
+  }
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -170,18 +196,61 @@ function ChannelSharePanel({
               <Badge tone="slate">PDF with version history</Badge>
             )}
           </div>
-          {latest ? (
+          {latestReady ? (
             <p className="mt-1 text-sm text-slate-600">
-              Latest: v{latest.versionNumber} · {formatDate(latest.createdAt)}
+              Latest: v{latestReady.versionNumber} ·{" "}
+              {formatDate(latestReady.createdAt)}
             </p>
           ) : (
             <p className="mt-1 text-sm text-slate-500">Not generated yet</p>
           )}
         </div>
-        {latest?.status ? (
-          <StatusBadge status={latest.status} />
+        {latestAttempt?.status ? (
+          <StatusBadge status={latestAttempt.status} />
         ) : null}
       </div>
+
+      {!latestReady && latestAttempt ? (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm text-slate-700">
+            {latestAttempt.status === "FAILED"
+              ? "The last generation attempt failed."
+              : latestAttempt.status === "RENDERING"
+                ? "Rendering in progress…"
+                : "Queued for rendering…"}
+          </p>
+          {latestAttempt.status === "FAILED" && latestAttempt.error ? (
+            <p className="mt-2 text-sm text-red-600">{latestAttempt.error}</p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {latestAttempt.status === "FAILED" ? (
+              <Button
+                size="sm"
+                loading={retryPending}
+                onClick={() => onRetry(latestAttempt.id)}
+              >
+                Retry
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => onGenerate(group.channel)}
+            >
+              {latestAttempt.status === "FAILED" ? "Generate new" : "Generate"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-red-600"
+              loading={deletePending}
+              onClick={() => confirmDelete(latestAttempt.id)}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {group.canonicalShareUrl ? (
         <div className="mt-4 space-y-3">
@@ -224,7 +293,9 @@ function ChannelSharePanel({
                       key={doc.id}
                       doc={doc}
                       isLatest={doc.id === group.latestDocumentId}
-                      onDelete={onDelete}
+                      onDelete={confirmDelete}
+                      onRetry={onRetry}
+                      retryPending={retryPending}
                     />
                   ))}
                 </TBody>
@@ -234,11 +305,16 @@ function ChannelSharePanel({
         </div>
       ) : null}
 
-      {!group.isLive && !group.canonicalShareUrl && group.versions.length === 0 ? (
-        <p className="mt-4 text-sm text-slate-500">
-          Generate a {group.label.toLowerCase()} to get a shareable link and PDF
-          downloads.
-        </p>
+      {!group.isLive && !group.canonicalShareUrl && !latestAttempt ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-slate-500">
+            Generate a {group.label.toLowerCase()} to get a shareable link and
+            PDF downloads.
+          </p>
+          <Button size="sm" onClick={() => onGenerate(group.channel)}>
+            Generate
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -248,11 +324,17 @@ function VersionRow({
   doc,
   isLatest,
   onDelete,
+  onRetry,
+  retryPending,
 }: {
   doc: DocumentShareMeta;
   isLatest: boolean;
   onDelete: (id: string) => void;
+  onRetry: (id: string) => void;
+  retryPending: boolean;
 }) {
+  const ready = doc.status === "READY" && doc.outputAssetId;
+
   return (
     <TR>
       <TD className="font-medium text-slate-900">
@@ -271,19 +353,30 @@ function VersionRow({
         ) : null}
       </TD>
       <TD className="text-right">
-        {doc.shareUrl ? (
+        {ready && doc.shareUrl ? (
           <a href={doc.shareUrl} target="_blank" rel="noreferrer">
             <Button size="sm" variant="secondary">
               View
             </Button>
           </a>
         ) : null}
-        {doc.downloadUrl ? (
+        {ready && doc.downloadUrl ? (
           <a href={doc.downloadUrl} className="ml-2">
             <Button size="sm" variant="secondary">
               Download
             </Button>
           </a>
+        ) : null}
+        {doc.status === "FAILED" ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="ml-2"
+            loading={retryPending}
+            onClick={() => onRetry(doc.id)}
+          >
+            Retry
+          </Button>
         ) : null}
         <Button
           size="sm"
@@ -453,6 +546,13 @@ export default function MarketingPage({
   const { data: library, isLoading } = useDocuments(propertyId);
   const generateDocument = useGenerateDocument(propertyId);
   const deleteDocument = useDeleteDocument(propertyId);
+  const retryDocument = useRetryDocument(propertyId);
+
+  function openGenerateForChannel(channel: string) {
+    const template = templates?.find((item) => item.channel === channel);
+    if (template) setTemplateId(template.id);
+    setGenerateOpen(true);
+  }
 
   const sitePath =
     library?.organization.slug && library?.property.slug
@@ -493,7 +593,7 @@ export default function MarketingPage({
       ) : null}
 
       {isLoading ? (
-        <Spinner label="Loading documents..." />
+        <MarketingDocumentsSkeleton />
       ) : !library || library.documents.length === 0 ? (
         <EmptyState
           title="No documents yet"
@@ -514,6 +614,10 @@ export default function MarketingPage({
                 orgSlug={library.organization.slug}
                 propertySlug={library.property.slug}
                 onDelete={(id) => deleteDocument.mutate(id)}
+                onRetry={(id) => retryDocument.mutate(id)}
+                onGenerate={openGenerateForChannel}
+                deletePending={deleteDocument.isPending}
+                retryPending={retryDocument.isPending}
               />
             ))
           ) : (
@@ -536,7 +640,7 @@ export default function MarketingPage({
               Choose a template format
             </p>
             {!templates ? (
-              <Spinner label="Loading templates..." />
+              <TemplateGridSkeleton count={3} />
             ) : templates.length === 0 ? (
               <p className="text-sm text-slate-600">No templates available.</p>
             ) : (

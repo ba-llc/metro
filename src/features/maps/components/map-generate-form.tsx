@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/empty-state";
+import { MapPreviewSkeleton, Skeleton } from "@/components/ui/skeleton";
 import {
   defaultMapParams,
   mapSizePresets,
@@ -83,6 +83,10 @@ const markerColorSelectOptions: readonly CustomSelectOption<string>[] =
     value,
     label: value,
   }));
+
+function baseMapTypeValue(mapType: MapParams["mapType"]): "satellite" | "roadmap" | "terrain" {
+  return mapType === "hybrid" ? "satellite" : (mapType ?? "roadmap");
+}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -306,7 +310,7 @@ export function MapGenerateForm({
         } as CSSProperties
       }
     >
-      <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
+      <div className="max-h-[70vh] space-y-5 overflow-y-auto px-0.5 pr-1">
         <CustomSelect
           label="Map type"
           value={kind}
@@ -317,9 +321,19 @@ export function MapGenerateForm({
         <div className="grid grid-cols-2 gap-4">
           <CustomSelect
             label="Base map style"
-            value={params.mapType ?? defaultMapParams(kind).mapType ?? "roadmap"}
+            value={baseMapTypeValue(
+              params.mapType ?? defaultMapParams(kind).mapType,
+            )}
             options={mapTypeOptions}
-            onValueChange={(mapType) => patch({ mapType })}
+            onValueChange={(mapType) =>
+              patch({
+                mapType,
+                showStreetLabels:
+                  mapType === "satellite"
+                    ? (params.showStreetLabels ?? params.mapType === "hybrid")
+                    : undefined,
+              })
+            }
           />
 
           <CustomSelect
@@ -329,6 +343,18 @@ export function MapGenerateForm({
             onValueChange={setSizePreset}
           />
         </div>
+
+        {baseMapTypeValue(params.mapType ?? defaultMapParams(kind).mapType) ===
+        "satellite" ? (
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={params.showStreetLabels ?? params.mapType === "hybrid"}
+              onChange={(e) => patch({ showStreetLabels: e.target.checked })}
+            />
+            Show street names and road labels
+          </label>
+        ) : null}
 
         <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -512,6 +538,14 @@ export function MapGenerateForm({
                 placeholder="Target, Walmart, Whole Foods"
               />
             </Field>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={params.showPlaceLabels ?? true}
+                onChange={(e) => patch({ showPlaceLabels: e.target.checked })}
+              />
+              Show business names
+            </label>
           </div>
         ) : null}
 
@@ -559,15 +593,15 @@ export function MapGenerateForm({
               className="size-full object-cover"
             />
           ) : previewLoading ? (
-            <Spinner label="Rendering preview..." />
+            <MapPreviewSkeleton />
           ) : (
             <div className="flex size-full items-center justify-center px-4 text-center text-xs text-slate-500">
               Adjust settings to see a preview
             </div>
           )}
           {previewLoading && previewUrl ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-white/60">
-              <Spinner label="Updating..." />
+            <div className="absolute inset-0 bg-white/70 p-4">
+              <Skeleton className="size-full rounded-md" />
             </div>
           ) : null}
         </div>

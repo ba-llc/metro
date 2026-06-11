@@ -30,32 +30,40 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      className="fixed inset-0 z-50 bg-slate-900/50"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        role="dialog"
-        aria-modal="true"
-        className={cn(
-          "max-h-[90vh] w-full overflow-y-auto rounded-lg bg-white shadow-xl",
-          size === "md" ? "max-w-lg" : size === "lg" ? "max-w-3xl" : "max-w-5xl",
-        )}
+        className="fixed bottom-0 right-0 top-0 flex items-center justify-center p-4"
+        style={{ left: "var(--app-sidebar-width, 15rem)" }}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
       >
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          >
-            <svg className="size-5" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-            </svg>
-          </button>
+        <div
+          role="dialog"
+          aria-modal="true"
+          className={cn(
+            "max-h-[90vh] w-full overflow-y-auto rounded-lg bg-white shadow-xl",
+            size === "md" ? "max-w-lg" : size === "lg" ? "max-w-3xl" : "max-w-5xl",
+          )}
+        >
+          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+            <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <svg className="size-5" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-6">{children}</div>
         </div>
-        <div className="p-6">{children}</div>
       </div>
     </div>
   );

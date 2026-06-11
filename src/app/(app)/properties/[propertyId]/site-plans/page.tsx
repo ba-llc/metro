@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
-import { EmptyState, Spinner } from "@/components/ui/empty-state";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SitePlanCardGridSkeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/utils";
 import {
   PropertyTabSection,
@@ -78,7 +79,7 @@ export default function SitePlansPage({
       ) : null}
 
       {isLoading ? (
-        <Spinner label="Loading site plans..." />
+        <SitePlanCardGridSkeleton count={3} />
       ) : !sitePlans || sitePlans.length === 0 ? (
         <EmptyState
           title="No site plans yet"

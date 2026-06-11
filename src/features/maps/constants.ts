@@ -2,9 +2,8 @@ import type { MapCreateInput } from "./schemas";
 
 export const mapTypeOptions = [
   { value: "satellite", label: "Satellite" },
-  { value: "hybrid", label: "Hybrid (satellite + labels)" },
   { value: "roadmap", label: "Road map" },
-  { value: "terrain", label: "Terrain" },
+  { value: "terrain", label: "Terrain / topographic" },
 ] as const;
 
 export const mapSizePresets = [
@@ -36,6 +35,7 @@ export function defaultMapParams(
         autoZoom: false,
         zoom: 18,
         mapType: "satellite",
+        showStreetLabels: false,
         width: 640,
         height: 480,
         scale: 2,
@@ -46,7 +46,8 @@ export function defaultMapParams(
       return {
         autoZoom: false,
         zoom: 12,
-        mapType: "hybrid",
+        mapType: "satellite",
+        showStreetLabels: true,
         width: 640,
         height: 480,
         scale: 2,
@@ -77,6 +78,7 @@ export function defaultMapParams(
         scale: 2,
         showPropertyMarker: true,
         propertyMarkerColor: "red",
+        showPlaceLabels: true,
       };
   }
 }

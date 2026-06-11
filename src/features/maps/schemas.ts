@@ -36,6 +36,10 @@ export const mapParamsSchema = z.object({
   propertyMarkerColor: z.string().optional(),
   propertyMarkerLabel: z.string().max(1).optional(),
   maxPlaceMarkers: z.coerce.number().int().min(0).max(40).optional(),
+  /** When false, retail POI pins omit business name overlays. Defaults to true. */
+  showPlaceLabels: z.boolean().optional(),
+  /** Satellite-only convenience toggle; renders Google hybrid when enabled. */
+  showStreetLabels: z.boolean().optional(),
 });
 
 export const mapCreateSchema = z.object({

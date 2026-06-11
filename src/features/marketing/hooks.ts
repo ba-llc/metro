@@ -93,3 +93,15 @@ export function useDeleteDocument(propertyId: string) {
       void qc.invalidateQueries({ queryKey: ["documents", propertyId] }),
   });
 }
+
+export function useRetryDocument(propertyId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) =>
+      apiFetch<DocumentShareMeta>(`/api/documents/${documentId}/retry`, {
+        method: "POST",
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ["documents", propertyId] }),
+  });
+}

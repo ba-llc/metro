@@ -100,15 +100,51 @@ export async function listProperties(
       : {}),
   };
 
-  return db.property.findMany({
+  const rows = await db.property.findMany({
     where,
     include: {
       address: true,
       photos: { orderBy: { sortOrder: "asc" }, take: 1, select: { assetId: true } },
+      sitePlans: {
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        select: {
+          latestExportAssetId: true,
+          pages: {
+            orderBy: { pageNumber: "asc" },
+            take: 1,
+            select: { imageAssetId: true },
+          },
+        },
+      },
       _count: { select: { spaces: true, sitePlans: true, documents: true } },
     },
     orderBy: { updatedAt: "desc" },
     ...(opts?.take ? { take: opts.take } : {}),
+  });
+
+  return rows.map((property) => {
+    const sitePlan = property.sitePlans[0];
+    const photoAssetId = property.photos[0]?.assetId ?? null;
+    const sitePlanExportId = sitePlan?.latestExportAssetId ?? null;
+    const sitePlanPageId = sitePlan?.pages[0]?.imageAssetId ?? null;
+
+    let coverAssetId: string | null = null;
+    let coverSource: "sitePlan" | "photo" | null = null;
+
+    if (sitePlanExportId) {
+      coverAssetId = sitePlanExportId;
+      coverSource = "sitePlan";
+    } else if (sitePlanPageId) {
+      coverAssetId = sitePlanPageId;
+      coverSource = "sitePlan";
+    } else if (photoAssetId) {
+      coverAssetId = photoAssetId;
+      coverSource = "photo";
+    }
+
+    const { sitePlans: _sitePlans, ...rest } = property;
+    return { ...rest, coverAssetId, coverSource };
   });
 }
 

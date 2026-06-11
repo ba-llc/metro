@@ -31,7 +31,7 @@ export function LogoAssetsPanel({
   onPlaceLogo,
 }: {
   logos: LogoAssetOption[];
-  onPlaceLogo: (assetId: string) => void;
+  onPlaceLogo: (assetId: string, tenantName: string) => void;
 }) {
   const readyCount = logos.filter((logo) => logo.assetId).length;
 
@@ -59,7 +59,7 @@ export function LogoAssetsPanel({
                   : `${logo.tenantName} has no usable logo yet`
               }
               onClick={() => {
-                if (logo.assetId) onPlaceLogo(logo.assetId);
+                if (logo.assetId) onPlaceLogo(logo.assetId, logo.tenantName);
               }}
               onDragStart={(event) => {
                 if (!logo.assetId) return;

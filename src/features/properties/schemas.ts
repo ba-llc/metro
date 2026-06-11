@@ -36,14 +36,20 @@ export const addressSchema = z.object({
   county: z.string().optional(),
 });
 
+const optionalNumberInput = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess(
+    (value) => (value === "" || value == null ? undefined : value),
+    schema.optional(),
+  ) as z.ZodEffects<z.ZodOptional<T>, z.infer<T> | undefined, unknown>;
+
 export const propertyCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   propertyType: z.enum(propertyTypes),
   status: z.enum(propertyStatuses).default("ACTIVE"),
   description: z.string().optional(),
-  totalGla: z.coerce.number().int().positive().optional(),
-  yearBuilt: z.coerce.number().int().min(1800).max(2100).optional(),
-  parkingRatio: z.coerce.number().positive().optional(),
+  totalGla: optionalNumberInput(z.coerce.number().int().positive()),
+  yearBuilt: optionalNumberInput(z.coerce.number().int().min(1800).max(2100)),
+  parkingRatio: optionalNumberInput(z.coerce.number().positive()),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   googlePlaceId: z.string().optional(),
