@@ -1,7 +1,7 @@
 import type { TemplateChannel } from "@prisma/client";
 
 /** Public path segment for the live property microsite (WEBSITE channel). */
-export const PROPERTY_WEBSITE_SEGMENT = "brochure";
+export const PROPERTY_WEBSITE_SEGMENT = "";
 
 /** URL path segment for PDF/downloadable channels under /properties/{slug}/. */
 export const CHANNEL_SLUG: Record<
@@ -44,7 +44,8 @@ export function isLiveChannel(channel: TemplateChannel): boolean {
 
 /** Live property microsite — always latest WEBSITE render. */
 export function propertySitePath(propertySlug: string): string {
-  return `/properties/${propertySlug}/${PROPERTY_WEBSITE_SEGMENT}`;
+  const segment = PROPERTY_WEBSITE_SEGMENT ? `/${PROPERTY_WEBSITE_SEGMENT}` : "";
+  return `/properties/${propertySlug}${segment}`;
 }
 
 export function channelSharePath(

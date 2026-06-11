@@ -41,6 +41,7 @@ model User {
   updatedAt    DateTime @updatedAt
 
   memberships Membership[]
+  propertyPublications PropertyPublication[]
 }
 
 enum MemberRole {
@@ -113,6 +114,7 @@ model Property {
   trafficCounts TrafficCount[]
   demographics DemographicDataset[]
   documents    GeneratedDocument[]
+  publication  PropertyPublication?
   activityLogs ActivityLog[]
 
   @@unique([organizationId, slug])
@@ -459,6 +461,12 @@ enum TemplateChannel {
   WEBSITE
 }
 
+enum PublicationStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+
 model Template {
   id             String          @id @default(cuid())
   organizationId String?         // null = system template
@@ -492,9 +500,29 @@ model GeneratedDocument {
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   template    Template @relation(fields: [templateId], references: [id])
   outputAsset Asset?   @relation(fields: [outputAssetId], references: [id])
+  publishedWebsiteFor PropertyPublication[] @relation("PublishedWebsiteDocument")
 
   @@index([propertyId, createdAt])
   @@index([propertyId, channel, versionNumber])
+}
+
+model PropertyPublication {
+  id                         String            @id @default(cuid())
+  propertyId                 String            @unique
+  status                     PublicationStatus @default(DRAFT)
+  publishedWebsiteDocumentId String?
+  publishedAt                DateTime?
+  unpublishedAt              DateTime?
+  lastPublishedById          String?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  property                 Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  publishedWebsiteDocument GeneratedDocument? @relation("PublishedWebsiteDocument", fields: [publishedWebsiteDocumentId], references: [id], onDelete: SetNull)
+  lastPublishedBy          User?              @relation(fields: [lastPublishedById], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([publishedWebsiteDocumentId])
 }
 
 // ---------------------------------------------------------------------------

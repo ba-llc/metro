@@ -19,13 +19,15 @@ import {
   useDeleteDocument,
   useDocuments,
   useGenerateDocument,
+  usePublishWebsite,
   useRetryDocument,
   useTemplates,
+  useUnpublishWebsite,
   type ChannelShareGroup,
   type DocumentShareMeta,
+  type DocumentLibraryResponse,
   type TemplateRecord,
 } from "@/features/marketing/hooks";
-import { propertySitePath } from "@/features/marketing/publicUrls";
 
 type ChannelTone = "green" | "amber" | "red" | "slate" | "blue";
 
@@ -145,20 +147,28 @@ function ShareLinkRow({
 
 function ChannelSharePanel({
   group,
+  publication,
   onDelete,
   onRetry,
   onGenerate,
+  onPublishWebsite,
+  onUnpublishWebsite,
   deletePending,
   retryPending,
+  publishPending,
+  unpublishPending,
 }: {
   group: ChannelShareGroup;
-  orgSlug: string;
-  propertySlug: string;
+  publication: DocumentLibraryResponse["publication"];
   onDelete: (id: string) => void;
   onRetry: (id: string) => void;
   onGenerate: (channel: string) => void;
+  onPublishWebsite: (id: string) => void;
+  onUnpublishWebsite: () => void;
   deletePending: boolean;
   retryPending: boolean;
+  publishPending: boolean;
+  unpublishPending: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const latestReady = group.versions.find(
@@ -191,14 +201,16 @@ function ChannelSharePanel({
               {labelize(group.channel)}
             </Badge>
             {group.isLive ? (
-              <Badge tone="green">Live — always current</Badge>
+              <Badge tone={publication.status === "PUBLISHED" ? "green" : "slate"}>
+                {publication.status === "PUBLISHED" ? "Published site" : "Website draft"}
+              </Badge>
             ) : (
               <Badge tone="slate">PDF with version history</Badge>
             )}
           </div>
           {latestReady ? (
             <p className="mt-1 text-sm text-slate-600">
-              Latest: v{latestReady.versionNumber} ·{" "}
+              {group.isLive ? "Latest draft" : "Latest"}: v{latestReady.versionNumber} ·{" "}
               {formatDate(latestReady.createdAt)}
             </p>
           ) : (
@@ -252,16 +264,69 @@ function ChannelSharePanel({
         </div>
       ) : null}
 
-      {group.canonicalShareUrl ? (
+      {group.isLive ? (
+        <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Public site
+              </p>
+              <p className="mt-1 font-mono text-sm text-slate-800">
+                {publication.publicUrl}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {publication.status === "PUBLISHED" && publication.publishedAt
+                  ? `Published ${formatDate(publication.publishedAt)}`
+                  : "Generate a website draft, then publish it when it is ready."}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {latestReady?.shareUrl ? (
+                <a href={latestReady.shareUrl} target="_blank" rel="noreferrer">
+                  <Button size="sm" variant="secondary">
+                    Preview draft
+                  </Button>
+                </a>
+              ) : null}
+              {latestReady ? (
+                <Button
+                  size="sm"
+                  loading={publishPending}
+                  onClick={() => onPublishWebsite(latestReady.id)}
+                >
+                  {publication.status === "PUBLISHED" &&
+                  publication.publishedWebsiteDocumentId === latestReady.id
+                    ? "Republish"
+                    : "Publish"}
+                </Button>
+              ) : null}
+              {publication.status === "PUBLISHED" ? (
+                <>
+                  <a href={publication.publicUrl} target="_blank" rel="noreferrer">
+                    <Button size="sm" variant="secondary">
+                      Open public
+                    </Button>
+                  </a>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-red-600"
+                    loading={unpublishPending}
+                    onClick={onUnpublishWebsite}
+                  >
+                    Unpublish
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : group.canonicalShareUrl ? (
         <div className="mt-4 space-y-3">
           <ShareLinkRow
-            label={group.isLive ? "Live public URL" : "Latest share link"}
+            label="Latest share link"
             url={group.canonicalShareUrl}
-            hint={
-              group.isLive
-                ? "Regenerating the website updates this URL automatically. No version history on the public site."
-                : "Opens the latest PDF. Previous versions remain available in history below."
-            }
+            hint="Opens the latest PDF. Previous versions remain available in history below."
           />
         </div>
       ) : null}
@@ -547,17 +612,14 @@ export default function MarketingPage({
   const generateDocument = useGenerateDocument(propertyId);
   const deleteDocument = useDeleteDocument(propertyId);
   const retryDocument = useRetryDocument(propertyId);
+  const publishWebsite = usePublishWebsite(propertyId);
+  const unpublishWebsite = useUnpublishWebsite(propertyId);
 
   function openGenerateForChannel(channel: string) {
     const template = templates?.find((item) => item.channel === channel);
     if (template) setTemplateId(template.id);
     setGenerateOpen(true);
   }
-
-  const sitePath =
-    library?.organization.slug && library?.property.slug
-      ? propertySitePath(library.property.slug)
-      : null;
 
   const channelGroups =
     library?.channels ??
@@ -572,17 +634,25 @@ export default function MarketingPage({
     <PropertyWorkspaceShell propertyId={propertyId}>
       <PropertyTabSection
         title="Marketing"
-        subtitle="Shareable links and downloadable PDFs are generated from the property record. Live websites update in place; PDFs keep version history."
+        subtitle="Generate website drafts and marketing PDFs from the property record. Publish controls when the public property site goes live."
         actions={
           <Button onClick={() => setGenerateOpen(true)}>Generate Document</Button>
         }
       />
 
-      {sitePath ? (
+      {library?.publication ? (
         <ShareLinkRow
-          label="Property website (live)"
-          url={sitePath}
-          hint="Example: /properties/delran/brochure — always serves the latest website render."
+          label={
+            library.publication.status === "PUBLISHED"
+              ? "Published property site"
+              : "Property site URL"
+          }
+          url={library.publication.publicUrl}
+          hint={
+            library.publication.status === "PUBLISHED"
+              ? "This public URL serves the currently published website version."
+              : "This URL stays unavailable until you publish a website draft."
+          }
         />
       ) : null}
 
@@ -608,17 +678,24 @@ export default function MarketingPage({
         <div className="mt-6 space-y-4">
           {channelGroups.length > 0 ? (
             channelGroups.map((group) => (
-              <ChannelSharePanel
-                key={group.channel}
-                group={group}
-                orgSlug={library.organization.slug}
-                propertySlug={library.property.slug}
-                onDelete={(id) => deleteDocument.mutate(id)}
-                onRetry={(id) => retryDocument.mutate(id)}
-                onGenerate={openGenerateForChannel}
-                deletePending={deleteDocument.isPending}
-                retryPending={retryDocument.isPending}
-              />
+                <ChannelSharePanel
+                  key={group.channel}
+                  group={group}
+                  publication={library.publication}
+                  onDelete={(id) => deleteDocument.mutate(id)}
+                  onRetry={(id) => retryDocument.mutate(id)}
+                  onGenerate={openGenerateForChannel}
+                  onPublishWebsite={(id) => publishWebsite.mutate(id)}
+                  onUnpublishWebsite={() => {
+                    if (confirm("Unpublish this public property website?")) {
+                      unpublishWebsite.mutate();
+                    }
+                  }}
+                  deletePending={deleteDocument.isPending}
+                  retryPending={retryDocument.isPending}
+                  publishPending={publishWebsite.isPending}
+                  unpublishPending={unpublishWebsite.isPending}
+                />
             ))
           ) : (
             <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">
@@ -662,7 +739,7 @@ export default function MarketingPage({
           </div>
           <p className="text-sm text-slate-500">
             PDF channels (flyer, brochure) create a new version each time you
-            generate. The property website replaces the live public URL.
+            generate. Website generations create drafts until you publish one.
           </p>
           {generateDocument.error ? (
             <p className="text-sm text-red-600">{generateDocument.error.message}</p>

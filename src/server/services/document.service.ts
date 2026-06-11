@@ -1,4 +1,4 @@
-import type { TemplateChannel } from "@prisma/client";
+import type { PublicationStatus, TemplateChannel } from "@prisma/client";
 import { db } from "@/server/db";
 import { ApiError } from "@/server/api/respond";
 import type { OrgContext } from "@/server/auth/context";
@@ -17,6 +17,8 @@ import {
 import {
   channelSharePath,
   isLiveChannel,
+  propertySitePath,
+  publicDocumentContentPath,
   publicDocumentDownloadPath,
   versionSharePath,
 } from "@/features/marketing/publicUrls";
@@ -37,11 +39,21 @@ export type DocumentShareMeta = {
   downloadUrl: string | null;
   isLatest: boolean;
   isLiveChannel: boolean;
+  isPublishedWebsite: boolean;
+};
+
+export type PropertyPublicationMeta = {
+  status: PublicationStatus | "NOT_PUBLISHED";
+  publicUrl: string;
+  publishedWebsiteDocumentId: string | null;
+  publishedAt: Date | null;
+  unpublishedAt: Date | null;
 };
 
 export type DocumentLibraryResponse = {
   property: { id: string; slug: string; name: string };
   organization: { slug: string; name: string };
+  publication: PropertyPublicationMeta;
   documents: DocumentShareMeta[];
   channels: {
     channel: TemplateChannel;
@@ -87,6 +99,7 @@ function enrichDocument(
   },
   ref: PublicPropertyRef,
   latestByChannel: Map<TemplateChannel, string>,
+  publishedWebsiteDocumentId: string | null,
 ): DocumentShareMeta {
   const ready = doc.status === "READY" && doc.outputAssetId;
   const isLatest = latestByChannel.get(doc.channel) === doc.id;
@@ -94,16 +107,14 @@ function enrichDocument(
 
   let shareUrl: string | null = null;
   if (ready) {
-    if (live && isLatest) {
-      shareUrl = channelSharePath(ref.propertySlug, doc.channel);
+    if (live) {
+      shareUrl = publicDocumentContentPath(doc.id);
     } else if (!live) {
       shareUrl = versionSharePath(
         ref.propertySlug,
         doc.channel,
         doc.id,
       );
-    } else if (live) {
-      shareUrl = channelSharePath(ref.propertySlug, doc.channel);
     }
   }
 
@@ -113,6 +124,7 @@ function enrichDocument(
     downloadUrl: ready ? publicDocumentDownloadPath(doc.id) : null,
     isLatest,
     isLiveChannel: live,
+    isPublishedWebsite: doc.channel === "WEBSITE" && doc.id === publishedWebsiteDocumentId,
   };
 }
 
@@ -128,6 +140,7 @@ export async function listDocuments(
     },
     include: {
       organization: { select: { slug: true, name: true } },
+      publication: true,
     },
   });
   if (!property) throw new ApiError("NOT_FOUND", "Property not found");
@@ -158,7 +171,14 @@ export async function listDocuments(
   }
 
   const enriched = docs.map((doc) =>
-    enrichDocument(doc, ref, latestByChannel),
+    enrichDocument(
+      doc,
+      ref,
+      latestByChannel,
+      property.publication?.status === "PUBLISHED"
+        ? property.publication.publishedWebsiteDocumentId
+        : null,
+    ),
   );
 
   const channelOrder: TemplateChannel[] = [
@@ -180,18 +200,18 @@ export async function listDocuments(
         .sort((a, b) => b.versionNumber - a.versionNumber);
       const latestId = latestByChannel.get(channel) ?? null;
       const live = isLiveChannel(channel);
-      const latestReady = versions.find(
-        (d) => d.status === "READY" && d.outputAssetId,
-      );
       return {
         channel,
         label: CHANNEL_LABELS[channel],
-        canonicalShareUrl: latestId
-          ? channelSharePath(ref.propertySlug, channel)
-          : null,
+        canonicalShareUrl:
+          live && property.publication?.status === "PUBLISHED"
+            ? propertySitePath(property.slug)
+            : latestId && !live
+              ? channelSharePath(ref.propertySlug, channel)
+              : null,
         latestDocumentId: latestId,
         isLive: live,
-        versions: live && latestReady ? [latestReady] : versions,
+        versions,
       };
     });
 
@@ -204,6 +224,16 @@ export async function listDocuments(
     organization: {
       slug: property.organization.slug,
       name: property.organization.name,
+    },
+    publication: {
+      status: property.publication?.status ?? "NOT_PUBLISHED",
+      publicUrl: propertySitePath(property.slug),
+      publishedWebsiteDocumentId:
+        property.publication?.status === "PUBLISHED"
+          ? property.publication.publishedWebsiteDocumentId
+          : null,
+      publishedAt: property.publication?.publishedAt ?? null,
+      unpublishedAt: property.publication?.unpublishedAt ?? null,
     },
     documents: enriched,
     channels,
@@ -262,7 +292,113 @@ export async function createDocument(
 
 export async function deleteDocument(ctx: OrgContext, documentId: string) {
   const doc = await getDocument(ctx, documentId);
+  const publication = await db.propertyPublication.findFirst({
+    where: {
+      publishedWebsiteDocumentId: doc.id,
+      status: "PUBLISHED",
+    },
+    select: { id: true },
+  });
+  if (publication) {
+    throw new ApiError(
+      "VALIDATION",
+      "Unpublish this property website before deleting the published version.",
+    );
+  }
   await db.generatedDocument.delete({ where: { id: doc.id } });
+}
+
+export async function publishWebsiteDocument(
+  ctx: OrgContext,
+  documentId: string,
+) {
+  const doc = await db.generatedDocument.findFirst({
+    where: {
+      id: documentId,
+      channel: "WEBSITE",
+      status: "READY",
+      outputAssetId: { not: null },
+      property: { organizationId: ctx.organizationId, deletedAt: null },
+    },
+    select: {
+      id: true,
+      propertyId: true,
+      versionNumber: true,
+      property: { select: { slug: true } },
+    },
+  });
+  if (!doc) {
+    throw new ApiError(
+      "VALIDATION",
+      "Only a ready Property Website document can be published.",
+    );
+  }
+
+  const publication = await db.propertyPublication.upsert({
+    where: { propertyId: doc.propertyId },
+    create: {
+      propertyId: doc.propertyId,
+      status: "PUBLISHED",
+      publishedWebsiteDocumentId: doc.id,
+      publishedAt: new Date(),
+      unpublishedAt: null,
+      lastPublishedById: ctx.userId,
+    },
+    update: {
+      status: "PUBLISHED",
+      publishedWebsiteDocumentId: doc.id,
+      publishedAt: new Date(),
+      unpublishedAt: null,
+      lastPublishedById: ctx.userId,
+    },
+  });
+
+  await logActivity(ctx, {
+    propertyId: doc.propertyId,
+    entityType: "property-publication",
+    entityId: publication.id,
+    action: "published",
+    detail: { documentId: doc.id, versionNumber: doc.versionNumber },
+  });
+
+  return {
+    status: publication.status,
+    publicUrl: propertySitePath(doc.property.slug),
+    publishedWebsiteDocumentId: publication.publishedWebsiteDocumentId,
+    publishedAt: publication.publishedAt,
+    unpublishedAt: publication.unpublishedAt,
+  };
+}
+
+export async function unpublishPropertyWebsite(
+  ctx: OrgContext,
+  propertyId: string,
+) {
+  await requireProperty(ctx, propertyId);
+  const publication = await db.propertyPublication.upsert({
+    where: { propertyId },
+    create: {
+      propertyId,
+      status: "UNPUBLISHED",
+      publishedWebsiteDocumentId: null,
+      unpublishedAt: new Date(),
+    },
+    update: {
+      status: "UNPUBLISHED",
+      publishedWebsiteDocumentId: null,
+      unpublishedAt: new Date(),
+    },
+  });
+
+  await logActivity(ctx, {
+    propertyId,
+    entityType: "property-publication",
+    entityId: publication.id,
+    action: "unpublished",
+    detail: {},
+  });
+
+  return publication;
 }
 
 /** Re-queues a failed or stuck document for rendering. */

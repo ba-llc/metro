@@ -27,6 +27,7 @@ export type DocumentShareMeta = {
   downloadUrl: string | null;
   isLatest: boolean;
   isLiveChannel: boolean;
+  isPublishedWebsite: boolean;
 };
 
 export type ChannelShareGroup = {
@@ -41,6 +42,13 @@ export type ChannelShareGroup = {
 export type DocumentLibraryResponse = {
   property: { id: string; slug: string; name: string };
   organization: { slug: string; name: string };
+  publication: {
+    status: "NOT_PUBLISHED" | "DRAFT" | "PUBLISHED" | "UNPUBLISHED";
+    publicUrl: string;
+    publishedWebsiteDocumentId: string | null;
+    publishedAt: string | null;
+    unpublishedAt: string | null;
+  };
   documents: DocumentShareMeta[];
   channels: ChannelShareGroup[];
 };
@@ -100,6 +108,28 @@ export function useRetryDocument(propertyId: string) {
     mutationFn: (documentId: string) =>
       apiFetch<DocumentShareMeta>(`/api/documents/${documentId}/retry`, {
         method: "POST",
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ["documents", propertyId] }),
+  });
+}
+
+export function usePublishWebsite(propertyId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) =>
+      apiFetch(`/api/documents/${documentId}/publish`, { method: "POST" }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ["documents", propertyId] }),
+  });
+}
+
+export function useUnpublishWebsite(propertyId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/properties/${propertyId}/publication`, {
+        method: "DELETE",
       }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ["documents", propertyId] }),

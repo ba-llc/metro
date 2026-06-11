@@ -86,6 +86,27 @@ export async function getLatestReadyDocument(
   });
 }
 
+export async function getPublishedWebsiteDocument(propertyId: string) {
+  const publication = await db.propertyPublication.findFirst({
+    where: {
+      propertyId,
+      status: "PUBLISHED",
+      publishedWebsiteDocumentId: { not: null },
+    },
+    include: {
+      publishedWebsiteDocument: {
+        include: {
+          template: { select: { name: true } },
+          outputAsset: { select: { id: true, mime: true, filename: true } },
+        },
+      },
+    },
+  });
+  const doc = publication?.publishedWebsiteDocument;
+  if (!doc || doc.status !== "READY" || !doc.outputAssetId) return null;
+  return doc;
+}
+
 export async function listDocumentVersions(
   propertyId: string,
   channel: TemplateChannel,
