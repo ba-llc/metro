@@ -127,6 +127,81 @@ function textBaselineY(y: number, paddingY: number, fontSize: number) {
   return y + paddingY + fontSize * 0.82;
 }
 
+const DIGIT_SEGMENTS: Record<string, string[]> = {
+  "0": ["a", "b", "c", "d", "e", "f"],
+  "1": ["b", "c"],
+  "2": ["a", "b", "g", "e", "d"],
+  "3": ["a", "b", "g", "c", "d"],
+  "4": ["f", "g", "b", "c"],
+  "5": ["a", "f", "g", "c", "d"],
+  "6": ["a", "f", "g", "e", "c", "d"],
+  "7": ["a", "b", "c"],
+  "8": ["a", "b", "c", "d", "e", "f", "g"],
+  "9": ["a", "b", "c", "d", "f", "g"],
+};
+
+const SEGMENT_PATHS: Record<string, string> = {
+  a: "M1.2 0.8 H4.8",
+  b: "M5.2 1.2 V4.4",
+  c: "M5.2 5.6 V8.8",
+  d: "M1.2 9.2 H4.8",
+  e: "M0.8 5.6 V8.8",
+  f: "M0.8 1.2 V4.4",
+  g: "M1.2 5 H4.8",
+};
+
+function vectorGlyphAdvance(char: string) {
+  if (char === " ") return 3;
+  if (char === ".") return 2.4;
+  if (char === "i") return 2.4;
+  if (char === "m") return 8.2;
+  return 6.4;
+}
+
+function vectorTextWidth(text: string, fontSize: number) {
+  const units = [...text].reduce(
+    (sum, char) => sum + vectorGlyphAdvance(char),
+    0,
+  );
+  return (units * fontSize) / 10;
+}
+
+function vectorTextSvg(text: string, x: number, y: number, fontSize: number) {
+  const scale = fontSize / 10;
+  let cursor = 0;
+  const glyphs = [...text].flatMap((char) => {
+    const advance = vectorGlyphAdvance(char);
+    const tx = x + cursor * scale;
+    cursor += advance;
+
+    if (char === " ") return [];
+    if (char === ".") {
+      return [
+        `<circle cx="${(tx + 1.1 * scale).toFixed(1)}" cy="${(y + 8.9 * scale).toFixed(1)}" r="${(0.65 * scale).toFixed(1)}" fill="#0f172a" />`,
+      ];
+    }
+    if (char === "i") {
+      return [
+        `<circle cx="${(tx + 1.1 * scale).toFixed(1)}" cy="${(y + 2 * scale).toFixed(1)}" r="${(0.55 * scale).toFixed(1)}" fill="#0f172a" />`,
+        `<path d="M1.1 4 V9" transform="translate(${tx.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" fill="none" stroke="#0f172a" stroke-width="1.35" stroke-linecap="round" />`,
+      ];
+    }
+    if (char === "m") {
+      return [
+        `<path d="M0.8 9 V4.4 C0.8 3.6 1.4 3.2 2.1 3.2 C2.8 3.2 3.3 3.7 3.3 4.6 V9 M3.3 4.7 C3.4 3.7 4 3.2 4.8 3.2 C5.7 3.2 6.2 3.8 6.2 4.8 V9" transform="translate(${tx.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" fill="none" stroke="#0f172a" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />`,
+      ];
+    }
+
+    const segments = DIGIT_SEGMENTS[char];
+    if (!segments) return [];
+    return [
+      `<path d="${segments.map((segment) => SEGMENT_PATHS[segment]).join(" ")}" transform="translate(${tx.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" fill="none" stroke="#0f172a" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />`,
+    ];
+  });
+
+  return glyphs.join("\n");
+}
+
 async function addRadiusLabels(
   body: Buffer,
   labels: RadiusRingLabel[],
@@ -149,8 +224,8 @@ async function addRadiusLabels(
 
   const elements = labels.map((label) => {
     const anchor = staticMapPixel(label.position, center, zoom, width, height, scale);
-    const text = escapeSvgText(label.text);
-    const boxWidth = text.length * fontSize * 0.58 + paddingX * 2;
+    const text = label.text;
+    const boxWidth = vectorTextWidth(text, fontSize) + paddingX * 2;
     const boxHeight = fontSize + paddingY * 2;
     const placeRight = anchor.x + gap + boxWidth <= outputWidth - margin;
     const x = Math.min(
@@ -164,13 +239,13 @@ async function addRadiusLabels(
     const lineEndX = placeRight ? x : x + boxWidth;
     const lineY = y + boxHeight / 2;
     const color = ringColorToCss(label.color);
-    const textY = textBaselineY(y, paddingY, fontSize);
+    const vectorY = y + (boxHeight - fontSize) / 2;
 
     return `
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="white" stroke-width="${4 * scale}" stroke-linecap="round" opacity="0.9" />
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${color}" stroke-width="${1.5 * scale}" stroke-linecap="round" opacity="0.9" />
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${boxWidth.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${borderRadius}" fill="white" fill-opacity="0.92" stroke="${color}" stroke-width="${1.5 * scale}" />
-      <text x="${(x + paddingX).toFixed(1)}" y="${textY.toFixed(1)}" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700">${text}</text>
+      ${vectorTextSvg(text, x + paddingX, vectorY, fontSize)}
     `;
   });
 

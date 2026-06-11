@@ -228,7 +228,7 @@ export function MapGenerateForm({
       } finally {
         if (!ac.signal.aborted) setPreviewLoading(false);
       }
-    }, 700);
+    }, 300);
 
     return () => {
       clearTimeout(timer);
@@ -750,7 +750,10 @@ export function MapGenerateForm({
               <Skeleton className="size-full rounded-md" />
             </div>
           ) : null}
-          <div className="absolute left-3 top-3 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+          <div
+            className="absolute left-3 top-3 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               title="Zoom in"
@@ -779,6 +782,7 @@ export function MapGenerateForm({
             type="button"
             title="Fit property"
             className="absolute bottom-3 left-3 flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50"
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
               fitViewport();

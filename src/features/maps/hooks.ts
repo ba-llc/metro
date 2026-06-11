@@ -64,8 +64,10 @@ export async function fetchMapPreviewBlob(
   input: MapCreateInput,
   signal?: AbortSignal,
 ): Promise<Blob> {
-  const res = await fetch(`/api/properties/${propertyId}/maps/preview`, {
+  const cacheBust = encodeURIComponent(JSON.stringify(input));
+  const res = await fetch(`/api/properties/${propertyId}/maps/preview?v=${cacheBust}`, {
     method: "POST",
+    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
     signal,
