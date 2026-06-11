@@ -163,11 +163,12 @@ export function useAnalyzeSitePlanPage() {
   });
 }
 
-export function useSnapshots(sitePlanId: string) {
+export function useSnapshots(sitePlanId: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["snapshots", sitePlanId],
     queryFn: () =>
       apiFetch<SnapshotListItem[]>(`/api/site-plans/${sitePlanId}/snapshots`),
+    enabled: options?.enabled ?? true,
   });
 }
 

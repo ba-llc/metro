@@ -19,10 +19,11 @@ export type MapAssetRecord = {
   createdAt: string;
 };
 
-export function useMaps(propertyId: string) {
+export function useMaps(propertyId: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["maps", propertyId],
     queryFn: () => apiFetch<MapAssetRecord[]>(`/api/properties/${propertyId}/maps`),
+    enabled: options?.enabled ?? true,
     // Poll while any map is generating.
     refetchInterval: (query) =>
       query.state.data?.some(

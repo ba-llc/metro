@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { EmptyState } from "@/components/ui/empty-state";
 import { StudioSkeleton } from "@/components/ui/skeleton";
 import { apiFetch, assetUrl, uploadAsset } from "@/lib/api";
 import { formatDate, formatRate, labelize } from "@/lib/utils";
@@ -82,13 +83,22 @@ export function Studio({
     text: string;
   } | null>(null);
 
-  const { data: plan, isLoading } = useSitePlanDetail(sitePlanId);
+  const {
+    data: plan,
+    error: planError,
+    isError: planIsError,
+    isLoading,
+  } = useSitePlanDetail(sitePlanId);
   const qc = useQueryClient();
   const { data: property } = usePropertyDetail(propertyId);
-  const { data: maps = [] } = useMaps(propertyId);
+  const mapsEnabled =
+    libraryPanel === "maps" || Boolean(plan?.pages.some((p) => p.sourceMapAssetId));
+  const { data: maps = [] } = useMaps(propertyId, { enabled: mapsEnabled });
   const saveAnnotations = useSaveAnnotations(sitePlanId);
   const analyzePage = useAnalyzeSitePlanPage();
-  const { data: snapshots } = useSnapshots(sitePlanId);
+  const { data: snapshots } = useSnapshots(sitePlanId, {
+    enabled: snapshotsOpen,
+  });
   const createSnapshot = useCreateSnapshot(sitePlanId);
   const restoreSnapshot = useRestoreSnapshot(sitePlanId);
   const registerExport = useRegisterExport(sitePlanId);
@@ -382,8 +392,34 @@ export function Studio({
     }
   }
 
-  if (isLoading || !plan || !page) {
+  if (isLoading) {
     return <StudioSkeleton />;
+  }
+
+  if (planIsError || !plan) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center bg-slate-50 p-6">
+        <EmptyState
+          title="Studio could not load"
+          description={
+            planError instanceof Error
+              ? planError.message
+              : "Reload the page or open the site plan again."
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!page) {
+    return (
+      <div className="flex h-[calc(100vh-4rem)] items-center justify-center bg-slate-50 p-6">
+        <EmptyState
+          title="No studio pages yet"
+          description="Upload or import a page before opening the editor."
+        />
+      </div>
+    );
   }
 
   return (
