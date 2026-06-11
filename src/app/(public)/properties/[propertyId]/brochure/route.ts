@@ -6,12 +6,12 @@ import {
   resolvePublicPropertyBySlug,
 } from "@/server/services/publicShare.service";
 
-type Params = { params: Promise<{ propertySlug: string }> };
+type Params = { params: Promise<{ propertyId: string }> };
 
 /** Live property microsite — always serves the latest WEBSITE render. */
 export async function GET(_req: Request, { params }: Params) {
   try {
-    const { propertySlug } = await params;
+    const { propertyId: propertySlug } = await params;
     const ref = await resolvePublicPropertyBySlug(propertySlug);
     const doc = await getLatestReadyDocument(ref.propertyId, "WEBSITE");
     if (!doc) {

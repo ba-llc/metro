@@ -10,11 +10,11 @@ import {
 import { labelize } from "@/lib/utils";
 
 type Params = {
-  params: Promise<{ propertySlug: string; channel: string }>;
+  params: Promise<{ propertyId: string; channel: string }>;
 };
 
 export default async function PublicPropertyChannelPage({ params }: Params) {
-  const { propertySlug, channel: channelSlug } = await params;
+  const { propertyId: propertySlug, channel: channelSlug } = await params;
 
   const channel = channelFromSlug(channelSlug);
   if (!channel || channel === "WEBSITE") notFound();
@@ -90,7 +90,7 @@ export default async function PublicPropertyChannelPage({ params }: Params) {
 }
 
 export async function generateMetadata({ params }: Params) {
-  const { propertySlug, channel: channelSlug } = await params;
+  const { propertyId: propertySlug, channel: channelSlug } = await params;
   try {
     const { ref, doc } = await resolvePublicChannelDocument({
       propertySlug,

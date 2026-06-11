@@ -11,7 +11,7 @@ import { labelize } from "@/lib/utils";
 
 type Params = {
   params: Promise<{
-    propertySlug: string;
+    propertyId: string;
     channel: string;
     documentId: string;
   }>;
@@ -21,7 +21,11 @@ type Params = {
 export default async function PublicPropertyDocumentVersionPage({
   params,
 }: Params) {
-  const { propertySlug, channel: channelSlug, documentId } = await params;
+  const {
+    propertyId: propertySlug,
+    channel: channelSlug,
+    documentId,
+  } = await params;
 
   const channel = channelFromSlug(channelSlug);
   if (!channel || channel === "WEBSITE") notFound();

@@ -4,14 +4,19 @@ export async function apiFetch<T>(
   init?: RequestInit & { json?: unknown },
 ): Promise<T> {
   const { json, ...rest } = init ?? {};
-  const res = await fetch(url, {
-    ...rest,
-    headers: {
-      ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...rest.headers,
-    },
-    body: json !== undefined ? JSON.stringify(json) : rest.body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...rest,
+      headers: {
+        ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...rest.headers,
+      },
+      body: json !== undefined ? JSON.stringify(json) : rest.body,
+    });
+  } catch {
+    throw new Error("Could not reach the Metro API. Check that the dev server is still running and reload the Studio.");
+  }
 
   const payload = (await res.json().catch(() => null)) as
     | { data: T }

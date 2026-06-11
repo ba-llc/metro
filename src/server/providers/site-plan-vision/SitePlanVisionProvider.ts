@@ -146,6 +146,109 @@ function annotationLayer(name = "AI Suggestions") {
   };
 }
 
+function buildVisionPrompt(input: {
+  req: SitePlanVisionRequest;
+  image: NormalizedImage;
+  spaceContext: Array<{
+    id: string;
+    suiteNumber: string;
+    squareFootage: number | null;
+    status: string;
+    spaceType: string;
+  }>;
+  tenantContext: Array<{
+    id: string;
+    name: string;
+    suiteNumber: string | null;
+    hasLogo: boolean;
+  }>;
+}) {
+  const visibleSpaceHints = input.req.spaces
+    .map((space) => {
+      const sf = space.squareFootage
+        ? `${space.squareFootage.toLocaleString("en-US")} SF`
+        : "unknown SF";
+      return `${space.id}: suite/name "${space.suiteNumber}", ${sf}, status ${space.status}, type ${space.spaceType}`;
+    })
+    .join("\n");
+
+  return (
+    `Property: ${input.req.property.name}\n` +
+    `Image size: ${input.image.width}x${input.image.height}\n` +
+    `Original page size: ${input.req.page.width}x${input.req.page.height}\n` +
+    `Spaces JSON: ${JSON.stringify(input.spaceContext)}\n` +
+    `Tenants JSON: ${JSON.stringify(input.tenantContext)}\n\n` +
+    "Space matching hints:\n" +
+    `${visibleSpaceHints}\n\n` +
+    "Task: detect visible retail tenant spaces on the site plan and return overlay rectangles for the actual store/suite footprints.\n" +
+    "Look for printed suite labels such as RETAIL A, RETAIL B, RETAIL C, RETAIL D, RETAIL E, RETAIL F, EDGE FITNESS, ASHLEY'S TENANT SPACE, LANDLORD ROOM, and labels with GLA/SF values. " +
+    "Use the printed suite name and/or GLA/SF to match to one of the supplied spaceId values. " +
+    "The rect must cover the large bounded tenant suite area, including the full bay outlined by demising walls; do not return only the inner text-label rectangle. " +
+    "If a suite boundary is irregular, return the tightest axis-aligned rectangle that covers the visible footprint. " +
+    "Prefer high precision over coverage count: skip spaces you cannot confidently match to a supplied spaceId. " +
+    "Return available/pending visible spaces in availableSpaces. Return any other clearly matched visible retail spaces in retailSpaces. " +
+    "tenantLogos: [{tenantId, rect:{x,y,w,h}, confidence}] only when a tenant area is clearly visible and the tenant hasLogo=true; place the logo rect centered inside the detected tenant footprint. " +
+    "callouts: [{text, point:{x,y}}] only for sparse review notes, not for facts already represented as overlays. " +
+    "Return JSON with keys availableSpaces, retailSpaces, tenantLogos, callouts, notes."
+  );
+}
+
+function buildVisionContexts(req: SitePlanVisionRequest) {
+  return {
+    spaceContext: req.spaces.map((space) => ({
+      id: space.id,
+      suiteNumber: space.suiteNumber,
+      squareFootage: space.squareFootage,
+      status: space.status,
+      spaceType: space.spaceType,
+    })),
+    tenantContext: req.tenants.map((tenant) => ({
+      id: tenant.id,
+      name: tenant.name,
+      suiteNumber: tenant.suiteNumber,
+      hasLogo: Boolean(tenant.logoAssetId),
+    })),
+  };
+}
+
+function providerSystemInstruction() {
+  return (
+    "You are a precise commercial real estate site-plan overlay detector. Return only valid JSON. " +
+    "Use normalized 0-1 coordinates relative to the provided image. " +
+    "Only reference spaceId and tenantId values supplied by the user. " +
+    "Do not invent tenants, square footage, suite names, or facts. " +
+    "When detecting a suite, return the whole retail/tenant footprint, not the small printed label box."
+  );
+}
+
+function parseAnalysisJson(content: string, providerName: string) {
+  const cleaned = content
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "");
+
+  let rawAnalysis: unknown;
+  try {
+    rawAnalysis = JSON.parse(cleaned);
+  } catch {
+    throw new SitePlanVisionError(
+      "INVALID_JSON",
+      `${providerName} returned a response that was not valid JSON.`,
+    );
+  }
+
+  const parsedAnalysis = analysisSchema.safeParse(rawAnalysis);
+  if (!parsedAnalysis.success) {
+    throw new SitePlanVisionError(
+      "VALIDATION_FAILED",
+      `${providerName} returned JSON that did not match the expected site plan analysis shape.`,
+    );
+  }
+
+  return parsedAnalysis.data;
+}
+
 async function normalizeVisionImage(req: SitePlanVisionRequest): Promise<NormalizedImage> {
   try {
     const base = sharp(req.image, { limitInputPixels: false })
@@ -375,25 +478,8 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
 
   async analyze(req: SitePlanVisionRequest): Promise<SitePlanVisionResult> {
     const image = await normalizeVisionImage(req);
-    const spaceContext = req.spaces.map((space) => ({
-      id: space.id,
-      suiteNumber: space.suiteNumber,
-      squareFootage: space.squareFootage,
-      status: space.status,
-      spaceType: space.spaceType,
-    }));
-    const tenantContext = req.tenants.map((tenant) => ({
-      id: tenant.id,
-      name: tenant.name,
-      suiteNumber: tenant.suiteNumber,
-      hasLogo: Boolean(tenant.logoAssetId),
-    }));
-    const visibleSpaceHints = req.spaces
-      .map((space) => {
-        const sf = space.squareFootage ? `${space.squareFootage.toLocaleString("en-US")} SF` : "unknown SF";
-        return `${space.id}: suite/name "${space.suiteNumber}", ${sf}, status ${space.status}, type ${space.spaceType}`;
-      })
-      .join("\n");
+    const { spaceContext, tenantContext } = buildVisionContexts(req);
+    const prompt = buildVisionPrompt({ req, image, spaceContext, tenantContext });
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -407,36 +493,14 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
         messages: [
           {
             role: "system",
-            content:
-              "You are a precise commercial real estate site-plan overlay detector. Return only valid JSON. " +
-              "Use normalized 0-1 coordinates relative to the provided image. " +
-              "Only reference spaceId and tenantId values supplied by the user. " +
-              "Do not invent tenants, square footage, suite names, or facts. " +
-              "When detecting a suite, return the whole retail/tenant footprint, not the small printed label box.",
+            content: providerSystemInstruction(),
           },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text:
-                  `Property: ${req.property.name}\n` +
-                  `Image size: ${image.width}x${image.height}\n` +
-                  `Original page size: ${req.page.width}x${req.page.height}\n` +
-                  `Spaces JSON: ${JSON.stringify(spaceContext)}\n` +
-                  `Tenants JSON: ${JSON.stringify(tenantContext)}\n\n` +
-                  "Space matching hints:\n" +
-                  `${visibleSpaceHints}\n\n` +
-                  "Task: detect visible retail tenant spaces on the site plan and return overlay rectangles for the actual store/suite footprints.\n" +
-                  "Look for printed suite labels such as RETAIL A, RETAIL B, RETAIL C, RETAIL D, RETAIL E, RETAIL F, EDGE FITNESS, ASHLEY'S TENANT SPACE, LANDLORD ROOM, and labels with GLA/SF values. " +
-                  "Use the printed suite name and/or GLA/SF to match to one of the supplied spaceId values. " +
-                  "The rect must cover the large bounded tenant suite area, including the full bay outlined by demising walls; do not return only the inner text-label rectangle. " +
-                  "If a suite boundary is irregular, return the tightest axis-aligned rectangle that covers the visible footprint. " +
-                  "Prefer high precision over coverage count: skip spaces you cannot confidently match to a supplied spaceId. " +
-                  "Return available/pending visible spaces in availableSpaces. Return any other clearly matched visible retail spaces in retailSpaces. " +
-                  "tenantLogos: [{tenantId, rect:{x,y,w,h}, confidence}] only when a tenant area is clearly visible and the tenant hasLogo=true; place the logo rect centered inside the detected tenant footprint. " +
-                  "callouts: [{text, point:{x,y}}] only for sparse review notes, not for facts already represented as overlays. " +
-                  "Return JSON with keys availableSpaces, retailSpaces, tenantLogos, callouts, notes.",
+                text: prompt,
               },
               {
                 type: "image_url",
@@ -452,6 +516,12 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
 
     if (!response.ok) {
       const detail = await response.text();
+      if (response.status === 429) {
+        throw new SitePlanVisionError(
+          "PROVIDER_REJECTION",
+          "AI Analyze could not run because the configured OpenAI key is over its quota or rate limit. Update billing/quota for OPENAI_API_KEY, switch to a valid key, or temporarily disable OpenAI vision.",
+        );
+      }
       throw new SitePlanVisionError(
         "PROVIDER_REJECTION",
         `OpenAI rejected the site plan analysis request (${response.status}). ${detail.slice(0, 180)}`,
@@ -477,25 +547,7 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
       );
     }
 
-    let rawAnalysis: unknown;
-    try {
-      rawAnalysis = JSON.parse(content);
-    } catch {
-      throw new SitePlanVisionError(
-        "INVALID_JSON",
-        "OpenAI returned a response that was not valid JSON.",
-      );
-    }
-
-    const parsedAnalysis = analysisSchema.safeParse(rawAnalysis);
-    if (!parsedAnalysis.success) {
-      throw new SitePlanVisionError(
-        "VALIDATION_FAILED",
-        "OpenAI returned JSON that did not match the expected site plan analysis shape.",
-      );
-    }
-
-    const analysis = parsedAnalysis.data;
+    const analysis = parseAnalysisJson(content, "OpenAI");
     const layer = annotationLayer();
     return {
       provider: this.name,
@@ -513,8 +565,147 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
   }
 }
 
+class GeminiSitePlanVisionProvider implements SitePlanVisionProvider {
+  readonly name = "gemini-vision";
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly model = process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+  ) {}
+
+  async analyze(req: SitePlanVisionRequest): Promise<SitePlanVisionResult> {
+    const image = await normalizeVisionImage(req);
+    const { spaceContext, tenantContext } = buildVisionContexts(req);
+    const prompt = `${providerSystemInstruction()}\n\n${buildVisionPrompt({
+      req,
+      image,
+      spaceContext,
+      tenantContext,
+    })}`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "x-goog-api-key": this.apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: prompt },
+                {
+                  inline_data: {
+                    mime_type: image.mime,
+                    data: image.body.toString("base64"),
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const detail = await response.text();
+      if (response.status === 429) {
+        throw new SitePlanVisionError(
+          "PROVIDER_REJECTION",
+          "AI Analyze could not run because the configured Gemini key is over its quota or rate limit. Update Gemini billing/quota or switch providers.",
+        );
+      }
+      throw new SitePlanVisionError(
+        "PROVIDER_REJECTION",
+        `Gemini rejected the site plan analysis request (${response.status}). ${detail.slice(0, 180)}`,
+      );
+    }
+
+    let payload: {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    };
+    try {
+      payload = (await response.json()) as typeof payload;
+    } catch {
+      throw new SitePlanVisionError(
+        "PROVIDER_REJECTION",
+        "Gemini returned an unreadable response for this site plan analysis.",
+      );
+    }
+
+    const content = payload.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("")
+      .trim();
+    if (!content) {
+      throw new SitePlanVisionError(
+        "PROVIDER_REJECTION",
+        "Gemini returned no analysis content for this site plan page.",
+      );
+    }
+
+    const analysis = parseAnalysisJson(content, "Gemini");
+    const layer = annotationLayer();
+    return {
+      provider: this.name,
+      notes: [
+        ...analysis.notes,
+        `Analyzed with Gemini ${this.model} using normalized ${image.width}x${image.height} JPEG (${Math.round(image.bytes / 1024)} KB).`,
+      ],
+      annotations: buildAnnotations({
+        layerId: layer.id,
+        spaces: req.spaces,
+        tenants: req.tenants,
+        analysis,
+      }),
+    };
+  }
+}
+
 export function getSitePlanVisionProvider(): SitePlanVisionProvider {
   const apiKey = process.env.OPENAI_API_KEY;
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const preferredProvider = process.env.SITE_PLAN_AI_PROVIDER?.toLowerCase();
+
+  if (preferredProvider === "gemini") {
+    if (!geminiApiKey) {
+      return {
+        name: "unconfigured",
+        analyze: async () => {
+          throw new SitePlanVisionError(
+            "MISSING_CONFIG",
+            "AI Analyze is configured for Gemini, but GEMINI_API_KEY is missing.",
+          );
+        },
+      };
+    }
+    return new GeminiSitePlanVisionProvider(geminiApiKey);
+  }
+
+  if (preferredProvider === "openai") {
+    if (!apiKey) {
+      return {
+        name: "unconfigured",
+        analyze: async () => {
+          throw new SitePlanVisionError(
+            "MISSING_CONFIG",
+            "AI Analyze is configured for OpenAI, but OPENAI_API_KEY is missing.",
+          );
+        },
+      };
+    }
+    return new OpenAiSitePlanVisionProvider(apiKey);
+  }
+
+  if (geminiApiKey) {
+    return new GeminiSitePlanVisionProvider(geminiApiKey);
+  }
+
   if (!apiKey && process.env.SITE_PLAN_AI_DEMO_MODE === "true") {
     return {
       name: "fallback-layout",
