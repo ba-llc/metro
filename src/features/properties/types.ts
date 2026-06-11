@@ -33,7 +33,13 @@ export type SpaceRecord = {
 };
 
 export type TenantLogoStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
-export type TenantLogoSource = "LIBRARY" | "BRANDFETCH" | "MANUAL";
+export type TenantLogoSource =
+  | "LIBRARY"
+  | "BRANDFETCH"
+  | "WEBSITE_OG"
+  | "FAVICON"
+  | "GOOGLE_FAVICON"
+  | "MANUAL";
 
 export type TenantRecord = {
   id: string;

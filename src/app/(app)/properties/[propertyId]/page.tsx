@@ -109,15 +109,15 @@ export default function PropertyWorkspacePage({
             hasZip={Boolean(property.address?.zip)}
             geocoded={property.latitude != null}
           />
+          <PhotosPanel propertyId={propertyId} photos={property.photos} />
         </div>
         <div className="space-y-6">
-          <PhotosPanel propertyId={propertyId} photos={property.photos} />
+          <ContactsPanel propertyId={propertyId} propertyContacts={property.contacts} />
           <TenantsPanel
             propertyId={propertyId}
             occupancies={property.occupancies}
             geocoded={property.latitude != null}
           />
-          <ContactsPanel propertyId={propertyId} propertyContacts={property.contacts} />
         </div>
       </div>
 

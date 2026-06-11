@@ -80,31 +80,30 @@ export function TenantsPanel({
             {occupancies.map((o) => (
               <li
                 key={o.id}
-                className="grid grid-cols-[1fr_auto] items-start gap-3 py-3"
+                className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0"
               >
-                <div className="space-y-2">
-                  <TenantLogoCell tenant={o.tenant} />
-                  <div className="flex flex-wrap items-center gap-2 pl-[3.75rem]">
-                    <span className="font-medium text-slate-800">
-                      {o.tenant.name}
-                    </span>
-                    {o.isAnchor ? <Badge tone="blue">Anchor</Badge> : null}
-                    {o.suiteNumber ? (
-                      <span className="text-xs text-slate-500">
-                        Suite {o.suiteNumber}
-                      </span>
-                    ) : null}
-                    {o.squareFootage ? (
-                      <span className="text-xs text-slate-500">
-                        {formatSF(o.squareFootage)}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
+                <TenantLogoCell
+                  tenant={o.tenant}
+                  meta={
+                    <>
+                      {o.isAnchor ? <Badge tone="blue">Anchor</Badge> : null}
+                      {o.suiteNumber ? (
+                        <span className="text-xs font-medium text-slate-500">
+                          Suite {o.suiteNumber}
+                        </span>
+                      ) : null}
+                      {o.squareFootage ? (
+                        <span className="text-xs font-medium text-slate-500">
+                          {formatSF(o.squareFootage)}
+                        </span>
+                      ) : null}
+                    </>
+                  }
+                />
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="text-red-600"
+                  className="text-slate-400 hover:bg-red-50 hover:text-red-600"
                   onClick={() => deleteOccupancy.mutate(o.id)}
                 >
                   Remove

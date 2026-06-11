@@ -25,6 +25,45 @@ const RADIUS_PRESETS = [
   { label: "2km", value: 2000 },
 ];
 
+function faviconPreviewUrl(website?: string) {
+  if (!website) return null;
+  return `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(
+    website,
+  )}&sz=64`;
+}
+
+function placeInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function PlaceLogoPreview({ place }: { place: DiscoveredPlaceRecord }) {
+  const [failed, setFailed] = useState(false);
+  const previewUrl = failed ? null : faviconPreviewUrl(place.website);
+
+  return (
+    <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={previewUrl}
+          alt=""
+          className="size-full object-contain p-1.5"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="text-xs font-semibold text-slate-400">
+          {placeInitials(place.name) || "?"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function TenantDiscoverModal({ open, onClose, propertyId, geocoded }: Props) {
   const [radius, setRadius] = useState(500);
   const [results, setResults] = useState<DiscoveredPlaceRecord[]>([]);
@@ -126,16 +165,17 @@ export function TenantDiscoverModal({ open, onClose, propertyId, geocoded }: Pro
                   return (
                     <li
                       key={p.placeId}
-                      className={`flex items-start gap-3 px-3 py-2.5 text-sm ${
+                      className={`flex items-start gap-3 px-3 py-3 text-sm ${
                         isExisting ? "bg-slate-50/50" : ""
                       }`}
                     >
                       <input
                         type="checkbox"
-                        className="mt-1"
+                        className="mt-3"
                         checked={isSelected}
                         onChange={() => toggle(p.placeId)}
                       />
+                      <PlaceLogoPreview place={p} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-slate-800 truncate">

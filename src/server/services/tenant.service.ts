@@ -155,12 +155,19 @@ export async function discoverNearbyTenants(
   }
 
   const provider = getTenantDiscoveryProvider();
-  const places = await provider.searchNearby({
-    center: { lat: property.latitude, lng: property.longitude },
-    radiusMeters: input.radiusMeters,
-    maxResults: input.maxResults,
-    includedTypes: input.includedTypes,
-  });
+  let places;
+  try {
+    places = await provider.searchNearby({
+      center: { lat: property.latitude, lng: property.longitude },
+      radiusMeters: input.radiusMeters,
+      maxResults: input.maxResults,
+      includedTypes: input.includedTypes,
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Tenant discovery provider failed";
+    throw new ApiError("INTERNAL", message);
+  }
 
   // Annotate with org-scoped dedup info so the UI can grey out re-imports.
   const placeIds = places.map((p) => p.placeId);

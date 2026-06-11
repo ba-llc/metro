@@ -179,6 +179,9 @@ enum TenantLogoStatus {
 enum TenantLogoSource {
   LIBRARY
   BRANDFETCH
+  WEBSITE_OG
+  FAVICON
+  GOOGLE_FAVICON
   MANUAL
 }
 

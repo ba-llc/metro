@@ -1,4 +1,4 @@
-import { BrandfetchResolver } from "./brandfetchResolver";
+import { GoogleFaviconResolver, WebsiteResolver } from "./websiteResolver";
 import type { LogoHit, LogoQuery, LogoResolver } from "./LogoResolver";
 
 /**
@@ -6,13 +6,20 @@ import type { LogoHit, LogoQuery, LogoResolver } from "./LogoResolver";
  * for the internal-library lookup first (it requires DB access scoped to
  * the org). Resolvers here are pure — they only call external APIs.
  *
- * Resolvers self-disable when their env var(s) are missing, so the list
- * itself doesn't need to be conditional.
+ * Order is intentional for local CRE tenant rosters:
+ *   1. WebsiteResolver  — scrape the tenant's own site (og:image / icon)
+ *   2. GoogleFavicon    — universal last resort for tiny local tenants
+ *
+ * Brandfetch remains available as a provider, but it is not part of the
+ * default chain because website/favicon hits are usually enough for local
+ * businesses and avoid an extra third-party dependency.
  */
 let chain: LogoResolver[] | null = null;
 
 export function getLogoResolverChain(): LogoResolver[] {
-  if (!chain) chain = [new BrandfetchResolver()];
+  if (!chain) {
+    chain = [new WebsiteResolver(), new GoogleFaviconResolver()];
+  }
   return chain;
 }
 
