@@ -123,6 +123,10 @@ function escapeSvgText(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
+function textBaselineY(y: number, paddingY: number, fontSize: number) {
+  return y + paddingY + fontSize * 0.82;
+}
+
 async function addRadiusLabels(
   body: Buffer,
   labels: RadiusRingLabel[],
@@ -160,12 +164,13 @@ async function addRadiusLabels(
     const lineEndX = placeRight ? x : x + boxWidth;
     const lineY = y + boxHeight / 2;
     const color = ringColorToCss(label.color);
+    const textY = textBaselineY(y, paddingY, fontSize);
 
     return `
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="white" stroke-width="${4 * scale}" stroke-linecap="round" opacity="0.9" />
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${color}" stroke-width="${1.5 * scale}" stroke-linecap="round" opacity="0.9" />
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${boxWidth.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${borderRadius}" fill="white" fill-opacity="0.92" stroke="${color}" stroke-width="${1.5 * scale}" />
-      <text x="${(x + paddingX).toFixed(1)}" y="${(y + boxHeight / 2).toFixed(1)}" dominant-baseline="middle" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700">${text}</text>
+      <text x="${(x + paddingX).toFixed(1)}" y="${textY.toFixed(1)}" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700">${text}</text>
     `;
   });
 
@@ -215,12 +220,13 @@ async function addPlaceLabels(
     const lineEndX = placeRight ? x : x + boxWidth;
     const lineY = y + boxHeight / 2;
     const color = markerColorToCss(label.color);
+    const textY = textBaselineY(y, paddingY, fontSize);
 
     return `
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="white" stroke-width="${4 * scale}" stroke-linecap="round" opacity="0.9" />
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${color}" stroke-width="${1.5 * scale}" stroke-linecap="round" opacity="0.9" />
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${boxWidth.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${borderRadius}" fill="white" fill-opacity="0.92" stroke="${color}" stroke-width="${1.5 * scale}" />
-      <text x="${(x + paddingX).toFixed(1)}" y="${(y + boxHeight / 2).toFixed(1)}" dominant-baseline="middle" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="600">${text}</text>
+      <text x="${(x + paddingX).toFixed(1)}" y="${textY.toFixed(1)}" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="600">${text}</text>
     `;
   });
 
