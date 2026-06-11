@@ -4,7 +4,10 @@ import type { OrgContext } from "@/server/auth/context";
 import { logActivity } from "@/server/services/activity.service";
 import { requireProperty } from "@/server/services/property.service";
 import { createAsset, getAsset, getAssetContent } from "@/server/services/asset.service";
-import { getSitePlanVisionProvider } from "@/server/providers/site-plan-vision/SitePlanVisionProvider";
+import {
+  getSitePlanVisionProvider,
+  SitePlanVisionError,
+} from "@/server/providers/site-plan-vision/SitePlanVisionProvider";
 import { pageAnnotationsSchema, type PageAnnotations } from "@/types/annotations";
 
 export async function createSitePlan(
@@ -117,6 +120,29 @@ export async function registerPage(
   return page;
 }
 
+export async function deleteSitePlanPage(ctx: OrgContext, pageId: string) {
+  const page = await db.sitePlanPage.findFirst({
+    where: { id: pageId, sitePlan: { organizationId: ctx.organizationId } },
+    include: { sitePlan: true },
+  });
+  if (!page) throw new ApiError("NOT_FOUND", "Page not found");
+
+  await db.sitePlanPage.delete({ where: { id: page.id } });
+
+  const pageCount = await db.sitePlanPage.count({
+    where: { sitePlanId: page.sitePlanId },
+  });
+  await db.sitePlan.update({
+    where: { id: page.sitePlanId },
+    data: {
+      pageCount,
+      status: pageCount > 0 ? "READY" : page.sitePlan.status,
+    },
+  });
+
+  return { ok: true };
+}
+
 /** Batch-replaces layers + annotations for a page (editor save). */
 export async function savePageAnnotations(
   ctx: OrgContext,
@@ -202,27 +228,41 @@ export async function analyzeSitePlanPage(ctx: OrgContext, pageId: string) {
 
   const { asset, body } = await getAssetContent(ctx, page.imageAssetId);
   const provider = getSitePlanVisionProvider();
-  const result = await provider.analyze({
-    image: body,
-    imageMime: asset.mime,
-    page: { width: page.width, height: page.height },
-    property: { name: page.sitePlan.property.name },
-    spaces: page.sitePlan.property.spaces.map((space) => ({
-      id: space.id,
-      suiteNumber: space.suiteNumber,
-      squareFootage: space.squareFootage,
-      status: space.status,
-      spaceType: space.spaceType,
-    })),
-    tenants: page.sitePlan.property.occupancies.map((occupancy) => ({
-      id: occupancy.tenant.id,
-      name: occupancy.tenant.name,
-      suiteNumber: occupancy.suiteNumber,
-      logoAssetId: occupancy.tenant.logoAssetId,
-    })),
-  });
+  const result = await provider
+    .analyze({
+      image: body,
+      imageMime: asset.mime,
+      page: { width: page.width, height: page.height },
+      property: { name: page.sitePlan.property.name },
+      spaces: page.sitePlan.property.spaces.map((space) => ({
+        id: space.id,
+        suiteNumber: space.suiteNumber,
+        squareFootage: space.squareFootage,
+        status: space.status,
+        spaceType: space.spaceType,
+      })),
+      tenants: page.sitePlan.property.occupancies.map((occupancy) => ({
+        id: occupancy.tenant.id,
+        name: occupancy.tenant.name,
+        suiteNumber: occupancy.suiteNumber,
+        logoAssetId: occupancy.tenant.logoAssetId,
+      })),
+    })
+    .catch((error: unknown) => {
+      if (error instanceof SitePlanVisionError) {
+        throw sitePlanVisionApiError(error);
+      }
+      throw error;
+    });
 
-  const annotations = pageAnnotationsSchema.parse(result.annotations);
+  const parsedAnnotations = pageAnnotationsSchema.safeParse(result.annotations);
+  if (!parsedAnnotations.success) {
+    throw new ApiError(
+      "INTERNAL",
+      "AI Analyze returned suggestions that could not be converted into editable site plan overlays.",
+    );
+  }
+  const annotations = parsedAnnotations.data;
   await logActivity(ctx, {
     propertyId: page.sitePlan.propertyId,
     entityType: "sitePlanPage",
@@ -235,6 +275,21 @@ export async function analyzeSitePlanPage(ctx: OrgContext, pageId: string) {
   });
 
   return { ...result, annotations };
+}
+
+function sitePlanVisionApiError(error: SitePlanVisionError): ApiError {
+  switch (error.code) {
+    case "MISSING_CONFIG":
+      return new ApiError("INTERNAL", error.message);
+    case "PROVIDER_REJECTION":
+      return new ApiError("INTERNAL", error.message);
+    case "INVALID_JSON":
+      return new ApiError("INTERNAL", error.message);
+    case "VALIDATION_FAILED":
+      return new ApiError("INTERNAL", error.message);
+    case "IMAGE_NORMALIZATION_FAILED":
+      return new ApiError("VALIDATION", error.message);
+  }
 }
 
 export async function createSnapshot(

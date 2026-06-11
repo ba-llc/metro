@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   storageKey: string;
   toolRail: ReactNode;
-  leftPanel: ReactNode;
+  leftPanel: ReactNode | null;
   canvas: ReactNode;
   rightPanel: ReactNode;
   defaultLeft?: number;
@@ -33,6 +33,7 @@ export function ResizableStudioPanels({
 }: Props) {
   const [leftWidth, setLeftWidth] = useState(defaultLeft);
   const [rightWidth, setRightWidth] = useState(defaultRight);
+  const hasLeftPanel = Boolean(leftPanel);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(storageKey);
@@ -79,18 +80,24 @@ export function ResizableStudioPanels({
     <div
       className="grid min-h-0 flex-1"
       style={{
-        gridTemplateColumns: `76px ${leftWidth}px 8px minmax(0, 1fr) 8px ${rightWidth}px`,
+        gridTemplateColumns: hasLeftPanel
+          ? `76px ${leftWidth}px 8px minmax(0, 1fr) 8px ${rightWidth}px`
+          : `76px minmax(0, 1fr) 8px ${rightWidth}px`,
       }}
     >
       <div className="min-h-0 border-r border-slate-200 bg-white">{toolRail}</div>
-      <aside className="min-h-0 overflow-hidden border-r border-slate-200 bg-white/90">
-        {leftPanel}
-      </aside>
-      <ResizeGutter
-        label="Resize left panel"
-        onPointerDown={(event) => startResize("left", event.clientX)}
-        onDoubleClick={() => setLeftWidth(leftWidth <= minLeft + 8 ? defaultLeft : minLeft)}
-      />
+      {hasLeftPanel ? (
+        <>
+          <aside className="min-h-0 overflow-hidden border-r border-slate-200 bg-white/90">
+            {leftPanel}
+          </aside>
+          <ResizeGutter
+            label="Resize left panel"
+            onPointerDown={(event) => startResize("left", event.clientX)}
+            onDoubleClick={() => setLeftWidth(leftWidth <= minLeft + 8 ? defaultLeft : minLeft)}
+          />
+        </>
+      ) : null}
       <main className="min-h-0 min-w-0 overflow-hidden">{canvas}</main>
       <ResizeGutter
         label="Resize right panel"

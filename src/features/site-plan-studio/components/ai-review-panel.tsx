@@ -1,7 +1,9 @@
 "use client";
 
-import { Check, MousePointer2, Sparkles, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { Bot, Check, FileText, MousePointer2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn, labelize } from "@/lib/utils";
 import { useStudioStore } from "../store";
 import { StudioPanel } from "./studio-shell";
 
@@ -16,29 +18,64 @@ export function AiReviewPanel({
   const discardSuggestions = useStudioStore((s) => s.discardSuggestions);
 
   const suggestions = reviewSuggestions?.annotations ?? [];
+  const provider = reviewSuggestions?.provider ?? "Unknown provider";
+  const notes = reviewSuggestions?.notes ?? [];
+  const isDemo = provider === "fallback-layout";
 
   return (
     <StudioPanel
       title="AI Review"
-      description="Review generated overlays before treating them as broker-edited annotations."
+      description="Review generated overlays before saving them to this site plan."
     >
       <div className="space-y-3">
-        <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+        <div
+          className={cn(
+            "rounded-2xl border p-4",
+            isDemo ? "border-amber-200 bg-amber-50" : "border-blue-200 bg-blue-50",
+          )}
+        >
           <div className="flex items-start gap-3">
-            <div className="inline-flex size-10 items-center justify-center rounded-2xl bg-white text-orange-600 shadow-sm">
+            <div
+              className={cn(
+                "inline-flex size-10 items-center justify-center rounded-2xl bg-white shadow-sm",
+                isDemo ? "text-amber-600" : "text-blue-700",
+              )}
+            >
               <Sparkles className="size-5" />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-950">
                 {suggestions.length} suggestions ready
               </p>
-	              <p className="mt-1 text-sm leading-6 text-slate-600">
-	                These suggestions are editable, but they are not saved to the
-	                site plan until you accept them.
-	              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Accept saves these overlays to the site plan. Discard removes them
+                without saving.
+              </p>
             </div>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <ReviewFact icon={<Bot className="size-4" />} label="Provider" value={provider} />
+          <ReviewFact
+            icon={<FileText className="size-4" />}
+            label="Overlays"
+            value={String(suggestions.length)}
+          />
+        </div>
+
+        {notes.length > 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Provider notes
+            </p>
+            <ul className="mt-2 space-y-1.5 text-sm leading-5 text-slate-600">
+              {notes.slice(0, 4).map((note, index) => (
+                <li key={`${index}:${note}`}>{note}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-2">
           <Button
@@ -50,7 +87,7 @@ export function AiReviewPanel({
             disabled={suggestions.length === 0}
           >
             <Check className="size-4" />
-            Accept
+            Accept and Save
           </Button>
           <Button
             size="sm"
@@ -61,7 +98,7 @@ export function AiReviewPanel({
             }}
           >
             <Trash2 className="size-4" />
-            Discard
+            Discard Unsaved
           </Button>
         </div>
 
@@ -78,7 +115,7 @@ export function AiReviewPanel({
               </span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-slate-900">
-                  {annotation.type}
+                  {labelize(annotation.type)}
                 </span>
                 <span className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                   <MousePointer2 className="size-3" />
@@ -95,5 +132,25 @@ export function AiReviewPanel({
         </div>
       </div>
     </StudioPanel>
+  );
+}
+
+function ReviewFact({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-3">
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <span className="text-brand-900">{icon}</span>
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold text-slate-950">{value}</p>
+    </div>
   );
 }

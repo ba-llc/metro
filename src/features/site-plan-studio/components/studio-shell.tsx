@@ -13,8 +13,10 @@ import {
   MousePointer2,
   PanelRight,
   Sparkles,
+  Redo2,
+  Undo2,
 } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SitePlanDetail } from "../types";
@@ -27,9 +29,6 @@ type ShellProps = {
   propertyId: string;
   plan: SitePlanDetail;
   pageIndex: number;
-  onPageChange: (index: number) => void;
-  mode: StudioMode;
-  onModeChange: (mode: StudioMode) => void;
   dirty: boolean;
   saving: boolean;
   analyzing: boolean;
@@ -37,6 +36,10 @@ type ShellProps = {
   analysisMessage: string | null;
   analysisTone?: "info" | "warning" | "error";
   reviewSuggestionCount: number;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
   onAnalyze: () => void;
   onVersions: () => void;
   onExport: () => void;
@@ -52,9 +55,6 @@ export function StudioShell({
   propertyId,
   plan,
   pageIndex,
-  onPageChange,
-  mode,
-  onModeChange,
   dirty,
   saving,
   analyzing,
@@ -62,6 +62,10 @@ export function StudioShell({
   analysisMessage,
   analysisTone = "info",
   reviewSuggestionCount,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
   onAnalyze,
   onVersions,
   onExport,
@@ -72,16 +76,9 @@ export function StudioShell({
   statusBar,
   children,
 }: ShellProps) {
-  const modeTabs: Array<
-    [StudioMode, ComponentType<{ className?: string }>, string]
-  > = [["edit", MousePointer2, "Edit"]];
-  if (reviewSuggestionCount > 0) {
-    modeTabs.push(["review", Sparkles, "AI Review"]);
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
-      <header className="grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-slate-200 bg-white/95 px-4 shadow-sm">
+      <header className="grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-slate-200 bg-white/95 px-4 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             href={`/properties/${propertyId}/site-plans`}
@@ -107,45 +104,29 @@ export function StudioShell({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 p-1">
-          {modeTabs.map(([id, Icon, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => onModeChange(id as StudioMode)}
-              className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-full px-3 text-xs font-semibold transition",
-                mode === id
-                  ? "bg-white text-brand-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800",
-              )}
-            >
-              <Icon className="size-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-
         <div className="flex min-w-0 items-center justify-end gap-2">
-          {plan.pages.length > 1 ? (
-            <div className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white p-1 md:flex">
-              {plan.pages.map((page, i) => (
-                <button
-                  key={page.id}
-                  type="button"
-                  onClick={() => onPageChange(i)}
-                  className={cn(
-                    "h-7 min-w-7 rounded-full px-2 text-xs font-semibold transition",
-                    i === pageIndex
-                      ? "bg-brand-900 text-white"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900",
-                  )}
-                >
-                  {page.pageNumber}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <div className="flex items-center gap-1 rounded-md border border-slate-200 bg-white p-0.5">
+            <button
+              type="button"
+              aria-label="Undo"
+              title="Undo"
+              disabled={!canUndo}
+              onClick={onUndo}
+              className="inline-flex size-7 items-center justify-center rounded text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300"
+            >
+              <Undo2 className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Redo"
+              title="Redo"
+              disabled={!canRedo}
+              onClick={onRedo}
+              className="inline-flex size-7 items-center justify-center rounded text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300"
+            >
+              <Redo2 className="size-4" />
+            </button>
+          </div>
           <Button
             size="sm"
             variant="secondary"
@@ -194,7 +175,7 @@ export function StudioShell({
       <footer className="flex h-10 shrink-0 items-center justify-between border-t border-slate-200 bg-white px-4 text-xs text-slate-500">
         {statusBar ?? (
           <>
-            <span>Space + drag to pan / Scroll to zoom / Drag gutters to resize panels</span>
+            <span>Space + drag to pan / Scroll to zoom</span>
             <span className="hidden shrink-0 items-center gap-4 md:flex">
               <span className="inline-flex items-center gap-1.5">
                 <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">

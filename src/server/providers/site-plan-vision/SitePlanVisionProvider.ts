@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import sharp from "sharp";
 import { z } from "zod";
 import type { PageAnnotations } from "@/types/annotations";
 
@@ -35,6 +36,22 @@ export type SitePlanVisionResult = {
   annotations: PageAnnotations;
 };
 
+export type SitePlanVisionErrorCode =
+  | "MISSING_CONFIG"
+  | "PROVIDER_REJECTION"
+  | "INVALID_JSON"
+  | "VALIDATION_FAILED"
+  | "IMAGE_NORMALIZATION_FAILED";
+
+export class SitePlanVisionError extends Error {
+  constructor(
+    readonly code: SitePlanVisionErrorCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export interface SitePlanVisionProvider {
   readonly name: string;
   analyze(req: SitePlanVisionRequest): Promise<SitePlanVisionResult>;
@@ -62,6 +79,15 @@ const analysisSchema = z.object({
       }),
     )
     .default([]),
+  retailSpaces: z
+    .array(
+      z.object({
+        spaceId: z.string(),
+        rect: normalizedRectSchema,
+        confidence: z.number().min(0).max(1).optional(),
+      }),
+    )
+    .optional(),
   tenantLogos: z
     .array(
       z.object({
@@ -81,6 +107,19 @@ const analysisSchema = z.object({
     .default([]),
   notes: z.array(z.string().max(160)).default([]),
 });
+
+const MAX_IMAGE_DIMENSION = Number(process.env.SITE_PLAN_AI_MAX_IMAGE_DIMENSION ?? 2048);
+const MAX_IMAGE_BYTES = Number(process.env.SITE_PLAN_AI_MAX_IMAGE_BYTES ?? 4_000_000);
+const MIN_JPEG_QUALITY = 55;
+const INITIAL_JPEG_QUALITY = 82;
+
+type NormalizedImage = {
+  body: Buffer;
+  mime: "image/jpeg";
+  width: number;
+  height: number;
+  bytes: number;
+};
 
 function id(prefix: string): string {
   return `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
@@ -107,6 +146,64 @@ function annotationLayer(name = "AI Suggestions") {
   };
 }
 
+async function normalizeVisionImage(req: SitePlanVisionRequest): Promise<NormalizedImage> {
+  try {
+    const base = sharp(req.image, { limitInputPixels: false })
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_DIMENSION,
+        height: MAX_IMAGE_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+
+    let quality = INITIAL_JPEG_QUALITY;
+    let output = await base.clone().jpeg({ quality, mozjpeg: true }).toBuffer();
+
+    while (output.byteLength > MAX_IMAGE_BYTES && quality > MIN_JPEG_QUALITY) {
+      quality -= 8;
+      output = await base.clone().jpeg({ quality, mozjpeg: true }).toBuffer();
+    }
+
+    if (output.byteLength > MAX_IMAGE_BYTES) {
+      const scale = Math.sqrt(MAX_IMAGE_BYTES / output.byteLength);
+      const reducedDimension = Math.max(900, Math.floor(MAX_IMAGE_DIMENSION * scale));
+      output = await sharp(req.image, { limitInputPixels: false })
+        .rotate()
+        .resize({
+          width: reducedDimension,
+          height: reducedDimension,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: MIN_JPEG_QUALITY, mozjpeg: true })
+        .toBuffer();
+    }
+
+    if (output.byteLength > MAX_IMAGE_BYTES) {
+      throw new SitePlanVisionError(
+        "IMAGE_NORMALIZATION_FAILED",
+        "Site plan page image is too large for AI Analyze after compression.",
+      );
+    }
+
+    const metadata = await sharp(output).metadata();
+    return {
+      body: output,
+      mime: "image/jpeg",
+      width: metadata.width ?? req.page.width,
+      height: metadata.height ?? req.page.height,
+      bytes: output.byteLength,
+    };
+  } catch (error) {
+    if (error instanceof SitePlanVisionError) throw error;
+    throw new SitePlanVisionError(
+      "IMAGE_NORMALIZATION_FAILED",
+      "Could not prepare this site plan page image for AI Analyze.",
+    );
+  }
+}
+
 function buildAnnotations(input: {
   layerId: string;
   layerName?: string;
@@ -118,8 +215,12 @@ function buildAnnotations(input: {
   const spacesById = new Map(input.spaces.map((space) => [space.id, space]));
   const tenantsById = new Map(input.tenants.map((tenant) => [tenant.id, tenant]));
   let zIndex = 1;
+  const detectedSpaces = [
+    ...input.analysis.availableSpaces,
+    ...(input.analysis.retailSpaces ?? []),
+  ];
 
-  for (const candidate of input.analysis.availableSpaces) {
+  for (const candidate of detectedSpaces) {
     const space = spacesById.get(candidate.spaceId);
     if (!space) continue;
     const rect = clampRect(candidate.rect);
@@ -273,6 +374,7 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
   ) {}
 
   async analyze(req: SitePlanVisionRequest): Promise<SitePlanVisionResult> {
+    const image = await normalizeVisionImage(req);
     const spaceContext = req.spaces.map((space) => ({
       id: space.id,
       suiteNumber: space.suiteNumber,
@@ -286,6 +388,12 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
       suiteNumber: tenant.suiteNumber,
       hasLogo: Boolean(tenant.logoAssetId),
     }));
+    const visibleSpaceHints = req.spaces
+      .map((space) => {
+        const sf = space.squareFootage ? `${space.squareFootage.toLocaleString("en-US")} SF` : "unknown SF";
+        return `${space.id}: suite/name "${space.suiteNumber}", ${sf}, status ${space.status}, type ${space.spaceType}`;
+      })
+      .join("\n");
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -300,9 +408,11 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
           {
             role: "system",
             content:
-              "You analyze commercial real estate site plan images and return only valid JSON. " +
-              "Use normalized 0-1 coordinates relative to the image. Do not invent square footage or tenant data. " +
-              "Only reference spaceId and tenantId values supplied by the user.",
+              "You are a precise commercial real estate site-plan overlay detector. Return only valid JSON. " +
+              "Use normalized 0-1 coordinates relative to the provided image. " +
+              "Only reference spaceId and tenantId values supplied by the user. " +
+              "Do not invent tenants, square footage, suite names, or facts. " +
+              "When detecting a suite, return the whole retail/tenant footprint, not the small printed label box.",
           },
           {
             role: "user",
@@ -311,18 +421,27 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
                 type: "text",
                 text:
                   `Property: ${req.property.name}\n` +
-                  `Image size: ${req.page.width}x${req.page.height}\n` +
+                  `Image size: ${image.width}x${image.height}\n` +
+                  `Original page size: ${req.page.width}x${req.page.height}\n` +
                   `Spaces JSON: ${JSON.stringify(spaceContext)}\n` +
                   `Tenants JSON: ${JSON.stringify(tenantContext)}\n\n` +
-                  "Return JSON with keys availableSpaces, tenantLogos, callouts, notes. " +
-                  "availableSpaces: [{spaceId, rect:{x,y,w,h}, confidence}] for available/pending suites visible on the plan. " +
-                  "tenantLogos: [{tenantId, rect:{x,y,w,h}, confidence}] for visible occupied/anchor tenant areas when a logo exists. " +
-                  "callouts: [{text, point:{x,y}}] for useful non-factual review prompts only. Keep callouts sparse.",
+                  "Space matching hints:\n" +
+                  `${visibleSpaceHints}\n\n` +
+                  "Task: detect visible retail tenant spaces on the site plan and return overlay rectangles for the actual store/suite footprints.\n" +
+                  "Look for printed suite labels such as RETAIL A, RETAIL B, RETAIL C, RETAIL D, RETAIL E, RETAIL F, EDGE FITNESS, ASHLEY'S TENANT SPACE, LANDLORD ROOM, and labels with GLA/SF values. " +
+                  "Use the printed suite name and/or GLA/SF to match to one of the supplied spaceId values. " +
+                  "The rect must cover the large bounded tenant suite area, including the full bay outlined by demising walls; do not return only the inner text-label rectangle. " +
+                  "If a suite boundary is irregular, return the tightest axis-aligned rectangle that covers the visible footprint. " +
+                  "Prefer high precision over coverage count: skip spaces you cannot confidently match to a supplied spaceId. " +
+                  "Return available/pending visible spaces in availableSpaces. Return any other clearly matched visible retail spaces in retailSpaces. " +
+                  "tenantLogos: [{tenantId, rect:{x,y,w,h}, confidence}] only when a tenant area is clearly visible and the tenant hasLogo=true; place the logo rect centered inside the detected tenant footprint. " +
+                  "callouts: [{text, point:{x,y}}] only for sparse review notes, not for facts already represented as overlays. " +
+                  "Return JSON with keys availableSpaces, retailSpaces, tenantLogos, callouts, notes.",
               },
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:${req.imageMime};base64,${req.image.toString("base64")}`,
+                  url: `data:${image.mime};base64,${image.body.toString("base64")}`,
                 },
               },
             ],
@@ -333,22 +452,57 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
 
     if (!response.ok) {
       const detail = await response.text();
-      throw new Error(`Site plan AI analysis failed (${response.status}): ${detail.slice(0, 240)}`);
+      throw new SitePlanVisionError(
+        "PROVIDER_REJECTION",
+        `OpenAI rejected the site plan analysis request (${response.status}). ${detail.slice(0, 180)}`,
+      );
     }
 
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string | null } }>;
-    };
+    let payload: { choices?: Array<{ message?: { content?: string | null } }> };
+    try {
+      payload = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string | null } }>;
+      };
+    } catch {
+      throw new SitePlanVisionError(
+        "PROVIDER_REJECTION",
+        "OpenAI returned an unreadable response for this site plan analysis.",
+      );
+    }
     const content = payload.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error("Site plan AI analysis returned no content");
+      throw new SitePlanVisionError(
+        "PROVIDER_REJECTION",
+        "OpenAI returned no analysis content for this site plan page.",
+      );
     }
 
-    const analysis = analysisSchema.parse(JSON.parse(content));
+    let rawAnalysis: unknown;
+    try {
+      rawAnalysis = JSON.parse(content);
+    } catch {
+      throw new SitePlanVisionError(
+        "INVALID_JSON",
+        "OpenAI returned a response that was not valid JSON.",
+      );
+    }
+
+    const parsedAnalysis = analysisSchema.safeParse(rawAnalysis);
+    if (!parsedAnalysis.success) {
+      throw new SitePlanVisionError(
+        "VALIDATION_FAILED",
+        "OpenAI returned JSON that did not match the expected site plan analysis shape.",
+      );
+    }
+
+    const analysis = parsedAnalysis.data;
     const layer = annotationLayer();
     return {
       provider: this.name,
-      notes: analysis.notes,
+      notes: [
+        ...analysis.notes,
+        `Analyzed normalized ${image.width}x${image.height} JPEG (${Math.round(image.bytes / 1024)} KB).`,
+      ],
       annotations: buildAnnotations({
         layerId: layer.id,
         spaces: req.spaces,
@@ -361,10 +515,21 @@ class OpenAiSitePlanVisionProvider implements SitePlanVisionProvider {
 
 export function getSitePlanVisionProvider(): SitePlanVisionProvider {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  if (!apiKey && process.env.SITE_PLAN_AI_DEMO_MODE === "true") {
     return {
       name: "fallback-layout",
       analyze: async (req) => fallbackAnalysis(req),
+    };
+  }
+  if (!apiKey) {
+    return {
+      name: "unconfigured",
+      analyze: async () => {
+        throw new SitePlanVisionError(
+          "MISSING_CONFIG",
+          "AI Analyze is not configured. Set OPENAI_API_KEY to enable OpenAI vision, or set SITE_PLAN_AI_DEMO_MODE=true to use demo suggestions.",
+        );
+      },
     };
   }
   return new OpenAiSitePlanVisionProvider(apiKey);

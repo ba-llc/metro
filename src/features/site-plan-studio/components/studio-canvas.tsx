@@ -36,6 +36,8 @@ export function StudioCanvas({
   logoDropEnabled,
   symbolDropEnabled,
   logoPlacementRequest,
+  toolInsertRequest,
+  symbolPlacementRequest,
 }: {
   page: SitePlanPageDetail;
   resolveLabel: (a: AnnotationData) => string;
@@ -44,6 +46,8 @@ export function StudioCanvas({
   logoDropEnabled: boolean;
   symbolDropEnabled: boolean;
   logoPlacementRequest: { id: number; assetId: string } | null;
+  toolInsertRequest: { id: number; toolId: string } | null;
+  symbolPlacementRequest: { id: number; text: string } | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -53,6 +57,8 @@ export function StudioCanvas({
   const [spacePan, setSpacePan] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const handledLogoPlacementRequest = useRef<number | null>(null);
+  const handledToolInsertRequest = useRef<number | null>(null);
+  const handledSymbolPlacementRequest = useRef<number | null>(null);
   const panStartRef = useRef<{ pointer: Point; pan: Point } | null>(null);
 
   const layers = useStudioStore((s) => s.layers);
@@ -207,6 +213,88 @@ export function StudioCanvas({
     });
   }
 
+  function visibleCenterPoint(): Point | null {
+    const el = containerRef.current;
+    if (!el) return null;
+    return containerPointToPagePoint({
+      x: el.clientWidth / 2,
+      y: el.clientHeight / 2,
+    });
+  }
+
+  function addToolAt(toolId: string, center: Point) {
+    const insertTool = getTool(toolId);
+    const clamped = clampPoint(center);
+    const type = insertTool.id as AnnotationData["type"];
+
+    if (insertTool.mode === "drag-rect") {
+      const w = type === "pad-site" ? 0.14 : 0.12;
+      const h = type === "pad-site" ? 0.09 : 0.075;
+      addAnnotation({
+        type,
+        geometry: {
+          rect: {
+            x: Math.min(Math.max(clamped.x - w / 2, 0), 1 - w),
+            y: Math.min(Math.max(clamped.y - h / 2, 0), 1 - h),
+            w,
+            h,
+          },
+        },
+        style: insertTool.defaultStyle,
+        label: null,
+      });
+      return;
+    }
+
+    if (insertTool.mode === "polygon") {
+      const w = type === "parcel-boundary" ? 0.16 : 0.12;
+      const h = type === "parcel-boundary" ? 0.1 : 0.08;
+      addAnnotation({
+        type,
+        geometry: {
+          points: [
+            clampPoint({ x: clamped.x, y: clamped.y - h / 2 }),
+            clampPoint({ x: clamped.x + w / 2, y: clamped.y }),
+            clampPoint({ x: clamped.x, y: clamped.y + h / 2 }),
+            clampPoint({ x: clamped.x - w / 2, y: clamped.y }),
+          ],
+        },
+        style: insertTool.defaultStyle,
+        label: null,
+      });
+      return;
+    }
+
+    if (insertTool.mode === "two-point") {
+      const dx = 0.07;
+      addAnnotation({
+        type,
+        geometry: {
+          points: [
+            clampPoint({ x: clamped.x - dx, y: clamped.y }),
+            clampPoint({ x: clamped.x + dx, y: clamped.y }),
+          ],
+        },
+        style: insertTool.defaultStyle,
+        label:
+          type === "dimension"
+            ? { text: insertTool.defaultText ?? "0'" }
+            : null,
+      });
+      return;
+    }
+
+    if (insertTool.mode === "point") {
+      if (type === "tenant-logo") return;
+      addAnnotation({
+        type,
+        geometry: { points: [clamped] },
+        style: insertTool.defaultStyle,
+        label: { text: insertTool.defaultText ?? "Label" },
+      });
+    }
+  }
+
   useEffect(() => {
     if (!logoPlacementRequest) return;
     if (handledLogoPlacementRequest.current === logoPlacementRequest.id) return;
@@ -223,6 +311,16 @@ export function StudioCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logoPlacementRequest]);
 
+  useEffect(() => {
+    if (!toolInsertRequest) return;
+    if (handledToolInsertRequest.current === toolInsertRequest.id) return;
+    handledToolInsertRequest.current = toolInsertRequest.id;
+    const center = visibleCenterPoint();
+    if (!center) return;
+    addToolAt(toolInsertRequest.toolId, center);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toolInsertRequest]);
+
   function addSymbolAt(text: string, point: Point) {
     const clamped = clampPoint(point);
     addAnnotation({
@@ -232,6 +330,16 @@ export function StudioCanvas({
       label: { text },
     });
   }
+
+  useEffect(() => {
+    if (!symbolPlacementRequest) return;
+    if (handledSymbolPlacementRequest.current === symbolPlacementRequest.id) return;
+    handledSymbolPlacementRequest.current = symbolPlacementRequest.id;
+    const center = visibleCenterPoint();
+    if (!center) return;
+    addSymbolAt(symbolPlacementRequest.text, center);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbolPlacementRequest]);
 
   function supportsDrop(event: DragEvent<HTMLDivElement>) {
     const types = Array.from(event.dataTransfer.types);

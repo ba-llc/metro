@@ -7,16 +7,19 @@ import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/empty-state";
+import { assetUrl, uploadAsset } from "@/lib/api";
 import { formatDate, formatRate } from "@/lib/utils";
-import { uploadAsset } from "@/lib/api";
 import type { AnnotationData } from "@/types/annotations";
 import { usePropertyDetail } from "@/features/properties/hooks";
 import type { OccupancyRecord, SpaceRecord } from "@/features/properties/types";
+import { useMaps, type MapAssetRecord } from "@/features/maps/hooks";
 import { useStudioStore } from "../store";
 import {
   useAnalyzeSitePlanPage,
   useCreateSnapshot,
+  useDeleteSitePlanPage,
   useRegisterExport,
+  useRegisterSitePlanPage,
   useRestoreSnapshot,
   useSaveAnnotations,
   useSitePlanDetail,
@@ -40,6 +43,8 @@ import {
   logoOptionsFromOccupancies,
 } from "./logo-assets-panel";
 import { SymbolAssetsPanel } from "./symbol-assets-panel";
+import { InsertAssetsPanel } from "./insert-assets-panel";
+import { MapAssetsPanel } from "./map-assets-panel";
 
 const SAVE_DEBOUNCE_MS = 1200;
 
@@ -59,19 +64,33 @@ export function Studio({
   const [analysisTone, setAnalysisTone] = useState<"info" | "warning" | "error">("info");
   const [mode, setMode] = useState<StudioMode>("edit");
   const [rightTab, setRightTab] = useState<RightPanelTab>("inspect");
+  const [libraryPanel, setLibraryPanel] = useState<"pages" | "maps" | null>("pages");
+  const [importingMapId, setImportingMapId] = useState<string | null>(null);
+  const [pendingImportedAssetId, setPendingImportedAssetId] = useState<string | null>(null);
   const [logoPlacementRequest, setLogoPlacementRequest] = useState<{
     id: number;
     assetId: string;
   } | null>(null);
+  const [toolInsertRequest, setToolInsertRequest] = useState<{
+    id: number;
+    toolId: string;
+  } | null>(null);
+  const [symbolPlacementRequest, setSymbolPlacementRequest] = useState<{
+    id: number;
+    text: string;
+  } | null>(null);
 
   const { data: plan, isLoading } = useSitePlanDetail(sitePlanId);
   const { data: property } = usePropertyDetail(propertyId);
+  const { data: maps = [] } = useMaps(propertyId);
   const saveAnnotations = useSaveAnnotations(sitePlanId);
   const analyzePage = useAnalyzeSitePlanPage();
   const { data: snapshots } = useSnapshots(sitePlanId);
   const createSnapshot = useCreateSnapshot(sitePlanId);
   const restoreSnapshot = useRestoreSnapshot(sitePlanId);
   const registerExport = useRegisterExport(sitePlanId);
+  const deletePage = useDeleteSitePlanPage(sitePlanId);
+  const registerPage = useRegisterSitePlanPage(sitePlanId);
 
   const loadPage = useStudioStore((s) => s.loadPage);
   const activeToolId = useStudioStore((s) => s.activeToolId);
@@ -79,6 +98,10 @@ export function Studio({
   const dirty = useStudioStore((s) => s.dirty);
   const markSaved = useStudioStore((s) => s.markSaved);
   const removeAnnotation = useStudioStore((s) => s.removeAnnotation);
+  const undo = useStudioStore((s) => s.undo);
+  const redo = useStudioStore((s) => s.redo);
+  const canUndo = useStudioStore((s) => s.historyPast.length > 0);
+  const canRedo = useStudioStore((s) => s.historyFuture.length > 0);
   const stageSuggestionLayer = useStudioStore((s) => s.stageSuggestionLayer);
   const reviewSuggestionCount = useStudioStore(
     (s) => s.reviewSuggestions?.annotations.length ?? 0,
@@ -107,9 +130,20 @@ export function Studio({
     }
   }, [mode, reviewSuggestionCount]);
 
+  useEffect(() => {
+    if (!pendingImportedAssetId || !plan) return;
+    const index = plan.pages.findIndex(
+      (candidate) => candidate.imageAssetId === pendingImportedAssetId,
+    );
+    if (index >= 0) {
+      setPageIndex(index);
+      setPendingImportedAssetId(null);
+    }
+  }, [pendingImportedAssetId, plan]);
+
   // Debounced batch save of the working state.
   useEffect(() => {
-    if (!dirty || !page) return;
+    if (!dirty || !page || reviewSuggestionCount > 0 || mode === "review") return;
     const timer = setTimeout(() => {
       const { layers, annotations } = useStudioStore.getState();
       saveAnnotations.mutate(
@@ -119,7 +153,7 @@ export function Studio({
     }, SAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, page?.id, workingAnnotations, workingLayers]);
+  }, [dirty, page?.id, reviewSuggestionCount, mode, workingAnnotations, workingLayers]);
 
   /** Resolves label text — bound labels derive from the Space record. */
   const resolveLabel = useCallback(
@@ -172,7 +206,10 @@ export function Studio({
     setAnalysisTone("info");
     analyzePage.mutate(page.id, {
       onSuccess: (result) => {
-        stageSuggestionLayer(result.annotations);
+        stageSuggestionLayer(result.annotations, {
+          provider: result.provider,
+          notes: result.notes,
+        });
         const count = result.annotations.annotations.length;
         const note = result.notes[0] ? ` ${result.notes[0]}` : "";
         const fallback = result.provider === "fallback-layout";
@@ -197,17 +234,101 @@ export function Studio({
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      const key = e.key.toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && key === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
       if (e.key === "Delete" || e.key === "Backspace") {
         const { selectedId } = useStudioStore.getState();
         if (selectedId) removeAnnotation(selectedId);
       }
-      const key = e.key.toLowerCase();
       if (key === "v") setTool("select");
       if (key === "h") setTool("pan");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [removeAnnotation, setTool]);
+  }, [redo, removeAnnotation, setTool, undo]);
+
+  function deletePageAt(pageId: string, index: number) {
+    if (!plan || plan.pages.length <= 1) return;
+    const nextIndex =
+      index <= pageIndex
+        ? Math.max(0, Math.min(pageIndex - 1, plan.pages.length - 2))
+        : pageIndex;
+    deletePage.mutate(pageId, {
+      onSuccess: () => {
+        setPageIndex(nextIndex);
+        loadedPageRef.current = null;
+      },
+    });
+  }
+
+  function handleToolChange(toolId: string) {
+    setLibraryPanel(null);
+    setTool(toolId);
+  }
+
+  function insertTool(toolId: string) {
+    setTool(toolId);
+    setLibraryPanel(null);
+    setToolInsertRequest({ id: Date.now(), toolId });
+  }
+
+  function imageDimensions(assetId: string): Promise<{ width: number; height: number }> {
+    const image = new window.Image();
+    image.src = assetUrl(assetId);
+    return image
+      .decode()
+      .catch(
+        () =>
+          new Promise<void>((resolve, reject) => {
+            image.onload = () => resolve();
+            image.onerror = () => reject(new Error("Map image failed to load"));
+          }),
+      )
+      .then(() => ({
+        width: image.naturalWidth || 1280,
+        height: image.naturalHeight || 720,
+      }));
+  }
+
+  async function importMapAsPage(map: MapAssetRecord) {
+    if (!plan || !map.imageAssetId || map.status !== "READY") return;
+    const existingIndex = plan.pages.findIndex(
+      (candidate) => candidate.imageAssetId === map.imageAssetId,
+    );
+    if (existingIndex >= 0) {
+      setPageIndex(existingIndex);
+      return;
+    }
+
+    setImportingMapId(map.id);
+    try {
+      const dimensions = await imageDimensions(map.imageAssetId);
+      const nextPageNumber =
+        Math.max(0, ...plan.pages.map((candidate) => candidate.pageNumber)) + 1;
+      await registerPage.mutateAsync({
+        pageNumber: nextPageNumber,
+        assetId: map.imageAssetId,
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+      setPendingImportedAssetId(map.imageAssetId);
+    } finally {
+      setImportingMapId(null);
+    }
+  }
 
   if (isLoading || !plan || !page) {
     return <Spinner label="Loading studio..." />;
@@ -218,9 +339,6 @@ export function Studio({
       propertyId={propertyId}
       plan={plan}
       pageIndex={pageIndex}
-      onPageChange={setPageIndex}
-      mode={mode}
-      onModeChange={setMode}
       dirty={dirty}
       saving={saveAnnotations.isPending}
       analyzing={analyzePage.isPending}
@@ -228,17 +346,49 @@ export function Studio({
       analysisMessage={analysisMessage}
       analysisTone={analysisTone}
       reviewSuggestionCount={reviewSuggestionCount}
+      canUndo={canUndo}
+      canRedo={canRedo}
+      onUndo={undo}
+      onRedo={redo}
       onAnalyze={analyzeCurrentPage}
       onVersions={() => setSnapshotsOpen(true)}
       onExport={() => void exportFlattened()}
       toolRail={
         <ToolRail
           activeToolId={activeToolId}
-          onToolChange={setTool}
+          pagesActive={libraryPanel === "pages"}
+          mapsActive={libraryPanel === "maps"}
+          onToolChange={handleToolChange}
+          onPagesOpen={() => {
+            setTool("select");
+            setLibraryPanel("pages");
+          }}
+          onMapsOpen={() => {
+            setTool("select");
+            setLibraryPanel("maps");
+          }}
         />
       }
       leftPanel={
-        activeToolId === "tenant-logo" ? (
+        libraryPanel === "pages" ? (
+          <PagesPanel
+            plan={plan}
+            activeIndex={pageIndex}
+            onPageChange={setPageIndex}
+            onDeletePage={deletePageAt}
+            deletingPageId={deletePage.isPending ? deletePage.variables : null}
+          />
+        ) : libraryPanel === "maps" ? (
+          <MapAssetsPanel
+            maps={maps}
+            importedPageIndexForAsset={(assetId) =>
+              plan.pages.findIndex((candidate) => candidate.imageAssetId === assetId)
+            }
+            importingMapId={importingMapId}
+            onImportMap={(map) => void importMapAsPage(map)}
+            onOpenPage={setPageIndex}
+          />
+        ) : activeToolId === "tenant-logo" ? (
           <LogoAssetsPanel
             logos={logoOptions}
             onPlaceLogo={(assetId) =>
@@ -246,25 +396,32 @@ export function Studio({
             }
           />
         ) : activeToolId === "directional-indicator" ? (
-          <SymbolAssetsPanel />
-        ) : (
-          <PagesPanel
-            plan={plan}
-            activeIndex={pageIndex}
-            onPageChange={setPageIndex}
+          <SymbolAssetsPanel
+            onPlaceSymbol={(text) =>
+              setSymbolPlacementRequest({ id: Date.now(), text })
+            }
           />
-        )
+        ) : activeToolId !== "select" && activeToolId !== "pan" ? (
+          <InsertAssetsPanel
+            activeToolId={activeToolId}
+            onInsert={insertTool}
+          />
+        ) : null
       }
       canvas={
-        <StudioCanvas
-          page={page}
-          resolveLabel={resolveLabel}
-          stageRef={stageRef}
-          mode={mode}
-          logoDropEnabled={activeToolId === "tenant-logo"}
-          symbolDropEnabled={activeToolId === "directional-indicator"}
-          logoPlacementRequest={logoPlacementRequest}
-        />
+        <div className="relative h-full min-h-0">
+          <StudioCanvas
+            page={page}
+            resolveLabel={resolveLabel}
+            stageRef={stageRef}
+            mode={mode}
+            logoDropEnabled={activeToolId === "tenant-logo"}
+            symbolDropEnabled={activeToolId === "directional-indicator"}
+            logoPlacementRequest={logoPlacementRequest}
+            toolInsertRequest={toolInsertRequest}
+            symbolPlacementRequest={symbolPlacementRequest}
+          />
+        </div>
       }
       rightPanel={
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">

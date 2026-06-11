@@ -18,6 +18,30 @@ export type PublicPropertyRef = {
   orgName: string;
 };
 
+export async function resolvePublicPropertyBySlug(
+  propertySlug: string,
+): Promise<PublicPropertyRef> {
+  const property = await db.property.findFirst({
+    where: {
+      slug: propertySlug,
+      deletedAt: null,
+      status: "ACTIVE",
+    },
+    include: {
+      organization: { select: { slug: true, name: true } },
+    },
+  });
+  if (!property) throw new ApiError("NOT_FOUND", "Property not found");
+
+  return {
+    propertyId: property.id,
+    propertySlug: property.slug,
+    propertyName: property.name,
+    orgSlug: property.organization.slug,
+    orgName: property.organization.name,
+  };
+}
+
 export async function resolvePublicProperty(
   orgSlug: string,
   propertySlug: string,
@@ -118,14 +142,19 @@ export async function getPublicDocumentContent(documentId: string) {
 }
 
 export async function resolvePublicChannelDocument(input: {
-  orgSlug: string;
   propertySlug: string;
   channelSlug: string;
   documentId?: string;
+  /** @deprecated Legacy /p/{org}/{property} URLs — prefer propertySlug-only routes */
+  orgSlug?: string;
 }) {
-  const ref = await resolvePublicProperty(input.orgSlug, input.propertySlug);
+  const ref = input.orgSlug
+    ? await resolvePublicProperty(input.orgSlug, input.propertySlug)
+    : await resolvePublicPropertyBySlug(input.propertySlug);
   const channel = channelFromSlug(input.channelSlug);
-  if (!channel) throw new ApiError("NOT_FOUND", "Unknown document type");
+  if (!channel || channel === "WEBSITE") {
+    throw new ApiError("NOT_FOUND", "Unknown document type");
+  }
 
   if (input.documentId) {
     const doc = await getPublicDocument(input.documentId);
@@ -148,15 +177,15 @@ export function buildShareLinks(
   channel: TemplateChannel,
   documentId: string,
 ) {
-  const canonicalUrl = channelSharePath(ref.orgSlug, ref.propertySlug, channel);
+  const canonicalUrl = channelSharePath(ref.propertySlug, channel);
   const versionUrl = isLiveChannel(channel)
     ? canonicalUrl
-    : versionSharePath(ref.orgSlug, ref.propertySlug, channel, documentId);
+    : versionSharePath(ref.propertySlug, channel, documentId);
 
   return {
     canonicalUrl,
     versionUrl,
-    siteUrl: propertySitePath(ref.orgSlug, ref.propertySlug),
+    siteUrl: propertySitePath(ref.propertySlug),
     isLive: isLiveChannel(channel),
   };
 }

@@ -21,7 +21,11 @@ const iconBySymbol: Record<string, React.ReactNode> = {
   "entry-arrow": <Navigation className="size-6" />,
 };
 
-export function SymbolAssetsPanel() {
+export function SymbolAssetsPanel({
+  onPlaceSymbol,
+}: {
+  onPlaceSymbol?: (text: string) => void;
+}) {
   return (
     <StudioPanel
       title="Map Symbols"
@@ -35,6 +39,7 @@ export function SymbolAssetsPanel() {
             draggable
             className="group flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm transition hover:border-brand-300 hover:bg-brand-50"
             title={`Drag ${symbol.label} onto the canvas`}
+            onClick={() => onPlaceSymbol?.(symbol.text)}
             onDragStart={(event) => {
               event.dataTransfer.effectAllowed = "copy";
               event.dataTransfer.setData("application/x-metro-symbol", symbol.text);

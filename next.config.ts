@@ -9,6 +9,35 @@ const nextConfig: NextConfig = {
     "@prisma/client",
     "bcryptjs",
   ],
+  async redirects() {
+    return [
+      {
+        source: "/p/:org/:property/site",
+        destination: "/properties/:property/brochure",
+        permanent: true,
+      },
+      {
+        source: "/p/:org/:property/brochure",
+        destination: "/properties/:property/brochure-pdf",
+        permanent: true,
+      },
+      {
+        source: "/p/:org/:property/:channel/v/:documentId",
+        destination: "/properties/:property/:channel/v/:documentId",
+        permanent: true,
+      },
+      {
+        source: "/p/:org/:property/:channel",
+        destination: "/properties/:property/:channel",
+        permanent: true,
+      },
+      {
+        source: "/p/:org/:property",
+        destination: "/properties/:property/brochure",
+        permanent: true,
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       // Konva's node entry optionally requires the native "canvas" package,

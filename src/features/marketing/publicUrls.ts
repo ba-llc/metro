@@ -1,10 +1,15 @@
 import type { TemplateChannel } from "@prisma/client";
 
-/** URL path segment for each marketing channel. */
-export const CHANNEL_SLUG: Record<TemplateChannel, string> = {
-  WEBSITE: "site",
+/** Public path segment for the live property microsite (WEBSITE channel). */
+export const PROPERTY_WEBSITE_SEGMENT = "brochure";
+
+/** URL path segment for PDF/downloadable channels under /properties/{slug}/. */
+export const CHANNEL_SLUG: Record<
+  Exclude<TemplateChannel, "WEBSITE">,
+  string
+> = {
   FLYER: "flyer",
-  BROCHURE: "brochure",
+  BROCHURE: "brochure-pdf",
   OM: "om",
   EMAIL: "email",
   SOCIAL: "social",
@@ -13,6 +18,11 @@ export const CHANNEL_SLUG: Record<TemplateChannel, string> = {
 const SLUG_TO_CHANNEL = Object.fromEntries(
   Object.entries(CHANNEL_SLUG).map(([channel, slug]) => [slug, channel]),
 ) as Record<string, TemplateChannel>;
+
+/** Legacy /p/.../site → WEBSITE */
+SLUG_TO_CHANNEL.site = "WEBSITE";
+/** Legacy /p/.../brochure was the PDF brochure channel */
+SLUG_TO_CHANNEL.brochure = "BROCHURE";
 
 /** Channels whose canonical public URL always serves the latest render (no version history). */
 export const LIVE_CHANNELS: ReadonlySet<TemplateChannel> = new Set(["WEBSITE"]);
@@ -32,28 +42,27 @@ export function isLiveChannel(channel: TemplateChannel): boolean {
   return LIVE_CHANNELS.has(channel);
 }
 
-export function propertySitePath(orgSlug: string, propertySlug: string): string {
-  return `/p/${orgSlug}/${propertySlug}`;
+/** Live property microsite — always latest WEBSITE render. */
+export function propertySitePath(propertySlug: string): string {
+  return `/properties/${propertySlug}/${PROPERTY_WEBSITE_SEGMENT}`;
 }
 
 export function channelSharePath(
-  orgSlug: string,
   propertySlug: string,
   channel: TemplateChannel,
 ): string {
   if (channel === "WEBSITE") {
-    return propertySitePath(orgSlug, propertySlug);
+    return propertySitePath(propertySlug);
   }
-  return `${propertySitePath(orgSlug, propertySlug)}/${CHANNEL_SLUG[channel]}`;
+  return `/properties/${propertySlug}/${CHANNEL_SLUG[channel]}`;
 }
 
 export function versionSharePath(
-  orgSlug: string,
   propertySlug: string,
   channel: TemplateChannel,
   documentId: string,
 ): string {
-  return `${channelSharePath(orgSlug, propertySlug, channel)}/v/${documentId}`;
+  return `${channelSharePath(propertySlug, channel)}/v/${documentId}`;
 }
 
 export function publicDocumentContentPath(documentId: string): string {

@@ -17,6 +17,15 @@ function newId(): string {
   return `ann_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`;
 }
 
+const HISTORY_LIMIT = 100;
+
+type HistorySnapshot = {
+  layers: AnnotationLayerData[];
+  annotations: AnnotationData[];
+  activeLayerId: string | null;
+  selectedId: string | null;
+};
+
 type StudioState = {
   pageId: string | null;
   layers: AnnotationLayerData[];
@@ -25,16 +34,23 @@ type StudioState = {
   selectedId: string | null;
   activeToolId: string;
   dirty: boolean;
-  reviewSuggestions: PageAnnotations | null;
+  reviewSuggestions: ReviewSuggestionState | null;
+  historyPast: HistorySnapshot[];
+  historyFuture: HistorySnapshot[];
 
   loadPage: (page: SitePlanPageDetail) => void;
   setTool: (toolId: string) => void;
   select: (id: string | null) => void;
+  undo: () => void;
+  redo: () => void;
 
   addAnnotation: (a: Omit<AnnotationData, "id" | "layerId" | "zIndex">) => string;
   updateAnnotation: (id: string, patch: Partial<AnnotationData>) => void;
   removeAnnotation: (id: string) => void;
-  stageSuggestionLayer: (payload: PageAnnotations) => void;
+  stageSuggestionLayer: (
+    payload: PageAnnotations,
+    meta: { provider: string; notes: string[] },
+  ) => void;
   updateSuggestionAnnotation: (id: string, patch: Partial<AnnotationData>) => void;
   acceptSuggestions: () => void;
   discardSuggestions: () => void;
@@ -48,6 +64,34 @@ type StudioState = {
   markSaved: () => void;
 };
 
+type ReviewSuggestionState = PageAnnotations & {
+  provider: string;
+  notes: string[];
+};
+
+function snapshotState(s: StudioState): HistorySnapshot {
+  return {
+    layers: s.layers,
+    annotations: s.annotations,
+    activeLayerId: s.activeLayerId,
+    selectedId: s.selectedId,
+  };
+}
+
+function withHistory(
+  s: StudioState,
+  patch: Partial<Pick<
+    StudioState,
+    "layers" | "annotations" | "activeLayerId" | "selectedId" | "activeToolId" | "dirty" | "reviewSuggestions"
+  >>,
+) {
+  return {
+    ...patch,
+    historyPast: [...s.historyPast, snapshotState(s)].slice(-HISTORY_LIMIT),
+    historyFuture: [],
+  };
+}
+
 export const useStudioStore = create<StudioState>((set, get) => ({
   pageId: null,
   layers: [],
@@ -57,6 +101,8 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   activeToolId: "select",
   dirty: false,
   reviewSuggestions: null,
+  historyPast: [],
+  historyFuture: [],
 
   loadPage: (page) =>
     set({
@@ -67,10 +113,38 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       selectedId: null,
       dirty: false,
       reviewSuggestions: null,
+      historyPast: [],
+      historyFuture: [],
     }),
 
   setTool: (toolId) => set({ activeToolId: toolId, selectedId: null }),
   select: (id) => set({ selectedId: id }),
+
+  undo: () =>
+    set((s) => {
+      const previous = s.historyPast.at(-1);
+      if (!previous) return s;
+      return {
+        ...previous,
+        historyPast: s.historyPast.slice(0, -1),
+        historyFuture: [snapshotState(s), ...s.historyFuture].slice(0, HISTORY_LIMIT),
+        activeToolId: "select",
+        dirty: true,
+      };
+    }),
+
+  redo: () =>
+    set((s) => {
+      const next = s.historyFuture[0];
+      if (!next) return s;
+      return {
+        ...next,
+        historyPast: [...s.historyPast, snapshotState(s)].slice(-HISTORY_LIMIT),
+        historyFuture: s.historyFuture.slice(1),
+        activeToolId: "select",
+        dirty: true,
+      };
+    }),
 
   addAnnotation: (a) => {
     const { activeLayerId, annotations } = get();
@@ -78,36 +152,46 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const id = newId();
     const zIndex =
       Math.max(0, ...annotations.map((x) => x.zIndex)) + 1;
-    set({
-      annotations: [
-        ...annotations,
-        { ...a, id, layerId: activeLayerId, zIndex },
-      ],
-      dirty: true,
-      selectedId: id,
-      activeToolId: "select",
-    });
+    set((s) =>
+      withHistory(s, {
+        annotations: [
+          ...s.annotations,
+          { ...a, id, layerId: activeLayerId, zIndex },
+        ],
+        dirty: true,
+        selectedId: id,
+        activeToolId: "select",
+      }),
+    );
     return id;
   },
 
   updateAnnotation: (id, patch) =>
-    set((s) => ({
-      annotations: s.annotations.map((a) =>
-        a.id === id ? { ...a, ...patch } : a,
-      ),
-      dirty: true,
-    })),
+    set((s) => {
+      if (!s.annotations.some((a) => a.id === id)) return s;
+      return withHistory(s, {
+        annotations: s.annotations.map((a) =>
+          a.id === id ? { ...a, ...patch } : a,
+        ),
+        dirty: true,
+      });
+    }),
 
   removeAnnotation: (id) =>
-    set((s) => ({
-      annotations: s.annotations.filter((a) => a.id !== id),
-      selectedId: s.selectedId === id ? null : s.selectedId,
-      dirty: true,
-    })),
+    set((s) => {
+      if (!s.annotations.some((a) => a.id === id)) return s;
+      return withHistory(s, {
+        annotations: s.annotations.filter((a) => a.id !== id),
+        selectedId: s.selectedId === id ? null : s.selectedId,
+        dirty: true,
+      });
+    }),
 
-  stageSuggestionLayer: (payload) =>
+  stageSuggestionLayer: (payload, meta) =>
     set({
       reviewSuggestions: {
+        provider: meta.provider,
+        notes: meta.notes,
         layers: payload.layers.map((layer, index) => ({
           ...layer,
           sortOrder: index,
@@ -139,12 +223,12 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const nextSortStart = s.layers.length;
       const acceptedLayers = s.reviewSuggestions.layers.map((layer, index) => ({
         ...layer,
-        name: "Broker Edits",
+        name: "Accepted AI Overlays",
         sortOrder: nextSortStart + index,
         visible: true,
         locked: false,
       }));
-      return {
+      return withHistory(s, {
         layers: [...s.layers, ...acceptedLayers],
         annotations: [...s.annotations, ...s.reviewSuggestions.annotations],
         activeLayerId: acceptedLayers[0]?.id ?? s.activeLayerId,
@@ -152,7 +236,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         activeToolId: "select",
         reviewSuggestions: null,
         dirty: true,
-      };
+      });
     }),
 
   discardSuggestions: () =>
@@ -165,7 +249,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   addLayer: (name) =>
     set((s) => {
       const id = newId();
-      return {
+      return withHistory(s, {
         layers: [
           ...s.layers,
           {
@@ -178,14 +262,17 @@ export const useStudioStore = create<StudioState>((set, get) => ({
         ],
         activeLayerId: id,
         dirty: true,
-      };
+      });
     }),
 
   updateLayer: (id, patch) =>
-    set((s) => ({
-      layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-      dirty: true,
-    })),
+    set((s) => {
+      if (!s.layers.some((l) => l.id === id)) return s;
+      return withHistory(s, {
+        layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+        dirty: true,
+      });
+    }),
 
   removeLayer: (id) =>
     set((s) => {
@@ -193,13 +280,13 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const layers = s.layers
         .filter((l) => l.id !== id)
         .map((l, i) => ({ ...l, sortOrder: i }));
-      return {
+      return withHistory(s, {
         layers,
         annotations: s.annotations.filter((a) => a.layerId !== id),
         activeLayerId:
           s.activeLayerId === id ? (layers[0]?.id ?? null) : s.activeLayerId,
         dirty: true,
-      };
+      });
     }),
 
   moveLayer: (id, direction) =>
@@ -211,10 +298,10 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       const [moved] = layers.splice(index, 1);
       if (!moved) return s;
       layers.splice(target, 0, moved);
-      return {
+      return withHistory(s, {
         layers: layers.map((l, i) => ({ ...l, sortOrder: i })),
         dirty: true,
-      };
+      });
     }),
 
   setActiveLayer: (id) => set({ activeLayerId: id }),

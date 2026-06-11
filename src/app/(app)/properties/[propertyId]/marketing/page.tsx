@@ -456,7 +456,7 @@ export default function MarketingPage({
 
   const sitePath =
     library?.organization.slug && library?.property.slug
-      ? propertySitePath(library.organization.slug, library.property.slug)
+      ? propertySitePath(library.property.slug)
       : null;
 
   const channelGroups =
@@ -482,7 +482,7 @@ export default function MarketingPage({
         <ShareLinkRow
           label="Property website (live)"
           url={sitePath}
-          hint="Example: /p/metro-commercial/lawrence-park-shopping-center — always serves the latest website render."
+          hint="Example: /properties/delran/brochure — always serves the latest website render."
         />
       ) : null}
 

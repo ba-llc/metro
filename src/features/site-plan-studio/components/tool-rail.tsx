@@ -2,15 +2,13 @@
 
 import {
   ArrowUpRight,
-  BoxSelect,
-  Building2,
-  Compass,
+  Hand,
   Image,
+  Layers2,
   MapPinned,
   MousePointer2,
-  Pentagon,
+  Navigation,
   Square,
-  Tag,
   Type,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,49 +16,61 @@ import { tools, type ToolDefinition } from "../tools";
 
 const iconByTool: Record<string, React.ReactNode> = {
   select: <MousePointer2 className="size-5" />,
+  pan: <Hand className="size-5" />,
   rectangle: <Square className="size-5" />,
-  polygon: <Pentagon className="size-5" />,
-  "parcel-boundary": <MapPinned className="size-5" />,
-  "pad-site": <Building2 className="size-5" />,
-  "dashed-outline": <BoxSelect className="size-5" />,
   arrow: <ArrowUpRight className="size-5" />,
-  dimension: <Tag className="size-5" />,
   "suite-label": <Type className="size-5" />,
-  "sqft-label": <Type className="size-5" />,
-  "parking-label": <Tag className="size-5" />,
-  callout: <Tag className="size-5" />,
   "tenant-logo": <Image className="size-5" />,
-  "directional-indicator": <Compass className="size-5" />,
+  "directional-indicator": <Navigation className="size-5" />,
 };
 
 const primaryTools = new Set([
   "select",
+  "pan",
   "rectangle",
-  "polygon",
-  "pad-site",
   "arrow",
   "suite-label",
-  "sqft-label",
-  "callout",
   "tenant-logo",
   "directional-indicator",
 ]);
 
+const railLabelByTool: Record<string, string> = {
+  rectangle: "Shapes",
+  "suite-label": "Text",
+};
+
 export function ToolRail({
   activeToolId,
+  pagesActive = false,
+  mapsActive = false,
   onToolChange,
+  onPagesOpen,
+  onMapsOpen,
 }: {
   activeToolId: string;
+  pagesActive?: boolean;
+  mapsActive?: boolean;
   onToolChange: (toolId: string) => void;
+  onPagesOpen?: () => void;
+  onMapsOpen?: () => void;
 }) {
   const visibleTools = tools.filter((tool) => primaryTools.has(tool.id));
 
   return (
     <div className="flex h-full flex-col items-center gap-2 overflow-y-auto p-3">
+      {onPagesOpen ? (
+        <ToolButton
+          label="Pages"
+          active={pagesActive}
+          onClick={onPagesOpen}
+        >
+          <Layers2 className="size-5" />
+        </ToolButton>
+      ) : null}
       {visibleTools.map((tool) => (
         <ToolButton
           key={tool.id}
-          label={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ""}`}
+          label={`${railLabelByTool[tool.id] ?? tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ""}`}
           active={activeToolId === tool.id}
           onClick={() => onToolChange(tool.id)}
           shortcut={tool.shortcut}
@@ -68,6 +78,15 @@ export function ToolRail({
           {iconForTool(tool)}
         </ToolButton>
       ))}
+      {onMapsOpen ? (
+        <ToolButton
+          label="Generated Maps"
+          active={mapsActive}
+          onClick={onMapsOpen}
+        >
+          <MapPinned className="size-5" />
+        </ToolButton>
+      ) : null}
     </div>
   );
 }

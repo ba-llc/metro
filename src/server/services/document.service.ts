@@ -95,16 +95,15 @@ function enrichDocument(
   let shareUrl: string | null = null;
   if (ready) {
     if (live && isLatest) {
-      shareUrl = channelSharePath(ref.orgSlug, ref.propertySlug, doc.channel);
+      shareUrl = channelSharePath(ref.propertySlug, doc.channel);
     } else if (!live) {
       shareUrl = versionSharePath(
-        ref.orgSlug,
         ref.propertySlug,
         doc.channel,
         doc.id,
       );
     } else if (live) {
-      shareUrl = channelSharePath(ref.orgSlug, ref.propertySlug, doc.channel);
+      shareUrl = channelSharePath(ref.propertySlug, doc.channel);
     }
   }
 
@@ -185,7 +184,7 @@ export async function listDocuments(
         channel,
         label: CHANNEL_LABELS[channel],
         canonicalShareUrl: latestId
-          ? channelSharePath(ref.orgSlug, ref.propertySlug, channel)
+          ? channelSharePath(ref.propertySlug, channel)
           : null,
         latestDocumentId: latestId,
         isLive: live,

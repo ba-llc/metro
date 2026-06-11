@@ -8,7 +8,12 @@ import {
 import { apiFetch, uploadAsset } from "@/lib/api";
 import { rasterizePdf } from "./pdf/convert";
 import type { PageAnnotations } from "@/types/annotations";
-import type { SitePlanDetail, SitePlanListItem, SnapshotListItem } from "./types";
+import type {
+  SitePlanDetail,
+  SitePlanListItem,
+  SitePlanPageDetail,
+  SnapshotListItem,
+} from "./types";
 
 export type SitePlanAnalysisResult = {
   provider: string;
@@ -114,6 +119,34 @@ export function useSaveAnnotations(sitePlanId: string) {
         method: "PUT",
         json: payload,
       }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ["site-plan", sitePlanId] }),
+  });
+}
+
+export function useRegisterSitePlanPage(sitePlanId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      pageNumber: number;
+      assetId: string;
+      width: number;
+      height: number;
+    }) =>
+      apiFetch<SitePlanPageDetail>(`/api/site-plans/${sitePlanId}/pages`, {
+        method: "POST",
+        json: input,
+      }),
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ["site-plan", sitePlanId] }),
+  });
+}
+
+export function useDeleteSitePlanPage(sitePlanId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (pageId: string) =>
+      apiFetch(`/api/site-plan-pages/${pageId}`, { method: "DELETE" }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ["site-plan", sitePlanId] }),
   });
