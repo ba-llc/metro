@@ -195,11 +195,19 @@ export function StudioShell({
         {statusBar ?? (
           <>
             <span>Space + drag to pan / Scroll to zoom / Drag gutters to resize panels</span>
-            <span className="hidden gap-4 md:flex">
-              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">V</kbd>
-              Select
-              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">H</kbd>
-              Pan
+            <span className="hidden shrink-0 items-center gap-4 md:flex">
+              <span className="inline-flex items-center gap-1.5">
+                <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
+                  V
+                </kbd>
+                Select
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
+                  H
+                </kbd>
+                Pan
+              </span>
             </span>
           </>
         )}

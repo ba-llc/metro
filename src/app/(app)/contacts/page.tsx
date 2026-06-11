@@ -95,7 +95,7 @@ export default function ContactsPage() {
   const deleteContact = useDeleteContact();
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Contacts"
         subtitle="Manage broker contacts that can be assigned to property records and reused across marketing assets."

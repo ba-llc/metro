@@ -6,7 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { contactCreateSchema, type ContactCreateInput } from "../schemas";
@@ -101,18 +102,17 @@ export function ContactsPanel({
         {unassigned.length > 0 ? (
           <div className="mb-6 space-y-3 border-b border-slate-100 pb-6">
             <Field label="Select from contacts">
-              <Select
+              <CustomSelect
                 value={selectedContactId}
-                onChange={(e) => setSelectedContactId(e.target.value)}
-              >
-                <option value="">Select a contact...</option>
-                {unassigned.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                    {c.title ? ` — ${c.title}` : ""}
-                  </option>
-                ))}
-              </Select>
+                onValueChange={setSelectedContactId}
+                options={[
+                  { value: "", label: "Select a contact..." },
+                  ...unassigned.map((c) => ({
+                    value: c.id,
+                    label: `${c.name}${c.title ? ` — ${c.title}` : ""}`,
+                  })),
+                ]}
+              />
             </Field>
             <Button
               variant="secondary"

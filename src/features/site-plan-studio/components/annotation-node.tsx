@@ -280,77 +280,57 @@ function TenantLogoNode({
   onChange: (patch: Partial<AnnotationData>) => void;
 }) {
   const image = useHtmlImage(assetId ? assetUrl(assetId) : null);
-  if (!image) {
-    return (
-      <Fragment>
-        <Rect
-          {...common}
-          x={rect.x}
-          y={rect.y}
-          width={rect.w}
-          height={rect.h}
-          fill="#f1f5f9"
-          stroke="#94a3b8"
-          dash={[6, 4]}
-          strokeWidth={1.5}
-        />
-        <Text
-          x={rect.x}
-          y={rect.y + rect.h / 2 - 7}
-          width={rect.w}
-          align="center"
-          text="Logo"
-          fontSize={13}
-          fill="#94a3b8"
-          listening={false}
-        />
-      </Fragment>
-    );
-  }
+  if (!image) return null;
+
   const imageAspect =
     image.naturalWidth > 0 && image.naturalHeight > 0
       ? image.naturalWidth / image.naturalHeight
       : rect.w / rect.h;
-  const boxAspect = rect.w / rect.h;
-  const contained =
-    imageAspect > boxAspect
-      ? {
-          x: rect.x,
-          y: rect.y + (rect.h - rect.w / imageAspect) / 2,
-          w: rect.w,
-          h: rect.w / imageAspect,
-        }
-      : {
-          x: rect.x + (rect.w - rect.h * imageAspect) / 2,
-          y: rect.y,
-          w: rect.h * imageAspect,
-          h: rect.h,
-        };
+  const heightFromWidth = rect.w / imageAspect;
+  const widthFromHeight = rect.h * imageAspect;
+  const useWidth = Math.abs(heightFromWidth - rect.h) <= Math.abs(widthFromHeight - rect.w);
+  const display = useWidth
+    ? { x: rect.x, y: rect.y, w: rect.w, h: heightFromWidth }
+    : { x: rect.x, y: rect.y, w: widthFromHeight, h: rect.h };
 
   return (
     <KonvaImage
       {...common}
-      x={contained.x}
-      y={contained.y}
-      width={contained.w}
-      height={contained.h}
+      x={display.x}
+      y={display.y}
+      width={display.w}
+      height={display.h}
       image={image}
-      onTransformEnd={(e) => {
+      onDragEnd={(e) => {
         const node = e.target;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        node.scale({ x: 1, y: 1 });
         onChange({
           geometry: {
             rect: {
               x: node.x() / pageW,
               y: node.y() / pageH,
-              w: Math.max(0.005, (contained.w * scaleX) / pageW),
-              h: Math.max(0.005, (contained.h * scaleY) / pageH),
+              w: display.w / pageW,
+              h: display.h / pageH,
             },
           },
         });
       }}
+      onTransformEnd={(e) => {
+        const node = e.target;
+        const scale = Math.max(node.scaleX(), node.scaleY());
+        node.scale({ x: 1, y: 1 });
+        onChange({
+          geometry: {
+            rotation: node.rotation(),
+            rect: {
+              x: node.x() / pageW,
+              y: node.y() / pageH,
+              w: Math.max(0.005, (display.w * scale) / pageW),
+              h: Math.max(0.005, (display.h * scale) / pageH),
+            },
+          },
+        });
+      }}
+      rotation={0}
     />
   );
 }

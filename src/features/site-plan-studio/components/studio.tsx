@@ -35,6 +35,11 @@ import {
 import { ToolRail } from "./tool-rail";
 import { PagesPanel } from "./pages-panel";
 import { AiReviewPanel } from "./ai-review-panel";
+import {
+  LogoAssetsPanel,
+  logoOptionsFromOccupancies,
+} from "./logo-assets-panel";
+import { SymbolAssetsPanel } from "./symbol-assets-panel";
 
 const SAVE_DEBOUNCE_MS = 1200;
 
@@ -54,6 +59,10 @@ export function Studio({
   const [analysisTone, setAnalysisTone] = useState<"info" | "warning" | "error">("info");
   const [mode, setMode] = useState<StudioMode>("edit");
   const [rightTab, setRightTab] = useState<RightPanelTab>("inspect");
+  const [logoPlacementRequest, setLogoPlacementRequest] = useState<{
+    id: number;
+    assetId: string;
+  } | null>(null);
 
   const { data: plan, isLoading } = useSitePlanDetail(sitePlanId);
   const { data: property } = usePropertyDetail(propertyId);
@@ -80,6 +89,7 @@ export function Studio({
   const page = plan?.pages[pageIndex];
   const spaces = property?.spaces ?? [];
   const occupancies: OccupancyRecord[] = property?.occupancies ?? [];
+  const logoOptions = logoOptionsFromOccupancies(occupancies);
 
   // Load page state into the store when the page changes (not on every save refetch).
   const loadedPageRef = useRef<string | null>(null);
@@ -228,11 +238,22 @@ export function Studio({
         />
       }
       leftPanel={
-        <PagesPanel
-          plan={plan}
-          activeIndex={pageIndex}
-          onPageChange={setPageIndex}
-        />
+        activeToolId === "tenant-logo" ? (
+          <LogoAssetsPanel
+            logos={logoOptions}
+            onPlaceLogo={(assetId) =>
+              setLogoPlacementRequest({ id: Date.now(), assetId })
+            }
+          />
+        ) : activeToolId === "directional-indicator" ? (
+          <SymbolAssetsPanel />
+        ) : (
+          <PagesPanel
+            plan={plan}
+            activeIndex={pageIndex}
+            onPageChange={setPageIndex}
+          />
+        )
       }
       canvas={
         <StudioCanvas
@@ -240,6 +261,9 @@ export function Studio({
           resolveLabel={resolveLabel}
           stageRef={stageRef}
           mode={mode}
+          logoDropEnabled={activeToolId === "tenant-logo"}
+          symbolDropEnabled={activeToolId === "directional-indicator"}
+          logoPlacementRequest={logoPlacementRequest}
         />
       }
       rightPanel={

@@ -14,9 +14,9 @@ import {
   CustomSelect,
   type CustomSelectOption,
 } from "@/components/ui/custom-select";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { labelize } from "@/lib/utils";
+import { cn, labelize } from "@/lib/utils";
 import { assetUrl, uploadAsset } from "@/lib/api";
 import type { AnnotationData } from "@/types/annotations";
 import type { OccupancyRecord, SpaceRecord } from "@/features/properties/types";
@@ -80,21 +80,24 @@ export function InspectorPanel({
   const isBindable = spaceBindableTypes.includes(selected.type);
   const boundSpace = spaces.find((s) => s.id === selected.spaceId);
   const rosterLogoOptions = occupancies
-    .filter((occupancy) => occupancy.tenant.logoAssetId)
     .map((occupancy) => {
       const suite = occupancy.suiteNumber
         ? `Suite ${occupancy.suiteNumber}`
         : null;
+      const hasLogo = Boolean(occupancy.tenant.logoAssetId);
       return {
         value: occupancy.id,
-        label: suite ? `${occupancy.tenant.name} - ${suite}` : occupancy.tenant.name,
+        label: suite
+          ? `${occupancy.tenant.name} - ${suite}`
+          : occupancy.tenant.name,
+        disabled: !hasLogo,
         tenantName: occupancy.tenant.name,
         suiteNumber: occupancy.suiteNumber,
-        logoAssetId: occupancy.tenant.logoAssetId as string,
+        logoAssetId: occupancy.tenant.logoAssetId,
       };
     });
   const selectedRosterLogo = rosterLogoOptions.find(
-    (option) => option.logoAssetId === selected.assetId,
+    (option) => option.logoAssetId && option.logoAssetId === selected.assetId,
   );
   const noRosterLogoValue = "__none";
   const customLogoValue = "__custom";
@@ -113,6 +116,49 @@ export function InspectorPanel({
   const rosterLogoByValue = new Map(
     rosterLogoOptions.map((option) => [option.value, option]),
   );
+
+  async function logoAspect(assetId: string): Promise<number> {
+    const image = new window.Image();
+    image.src = assetUrl(assetId);
+    await image.decode().catch(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("Logo image failed to load"));
+        }),
+    );
+    return image.naturalWidth > 0 && image.naturalHeight > 0
+      ? image.naturalWidth / image.naturalHeight
+      : 1;
+  }
+
+  async function applyLogoAsset(assetId: string | null) {
+    if (!selected) return;
+    if (!assetId || !selected.geometry.rect) {
+      updateAnnotation(selected.id, { assetId });
+      return;
+    }
+    const aspect = await logoAspect(assetId).catch(() => 1);
+    const rect = selected.geometry.rect;
+    const center = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+    const maxSide = Math.min(0.12, Math.max(0.045, Math.max(rect.w, rect.h)));
+    const next =
+      aspect >= 1
+        ? { w: maxSide, h: maxSide / aspect }
+        : { w: maxSide * aspect, h: maxSide };
+    updateAnnotation(selected.id, {
+      assetId,
+      geometry: {
+        ...selected.geometry,
+        rect: {
+          x: Math.min(Math.max(center.x - next.w / 2, 0), 1 - next.w),
+          y: Math.min(Math.max(center.y - next.h / 2, 0), 1 - next.h),
+          w: next.w,
+          h: next.h,
+        },
+      },
+    });
+  }
 
   function patchStyle(patch: Partial<AnnotationData["style"]>) {
     if (!selected) return;
@@ -212,14 +258,26 @@ export function InspectorPanel({
 
         {isText && selected.type !== "callout" ? (
           <Field label="Bind to space field">
-            <Select
+            <CustomSelect
               value={
                 selected.label?.binding
                   ? `${selected.label.binding.field}:${selected.spaceId ?? ""}`
                   : ""
               }
-              onChange={(e) => {
-                const v = e.target.value;
+              options={[
+                { value: "", label: "Free text" },
+                ...spaces.flatMap((s) => [
+                  {
+                    value: `suiteNumber:${s.id}`,
+                    label: `Suite ${s.suiteNumber} - suite number`,
+                  },
+                  {
+                    value: `squareFootage:${s.id}`,
+                    label: `Suite ${s.suiteNumber} - square footage`,
+                  },
+                ] satisfies CustomSelectOption<string>[]),
+              ]}
+              onValueChange={(v) => {
                 if (!v) {
                   updateAnnotation(selected.id, {
                     label: { text: selected.label?.text ?? "" },
@@ -244,17 +302,7 @@ export function InspectorPanel({
                   },
                 });
               }}
-            >
-              <option value="">Free text</option>
-              {spaces.flatMap((s) => [
-                <option key={`${s.id}-suite`} value={`suiteNumber:${s.id}`}>
-                  Suite {s.suiteNumber} - suite number
-                </option>,
-                <option key={`${s.id}-sf`} value={`squareFootage:${s.id}`}>
-                  Suite {s.suiteNumber} - square footage
-                </option>,
-              ])}
-            </Select>
+            />
           </Field>
         ) : null}
       </InspectorSection>
@@ -337,9 +385,7 @@ export function InspectorPanel({
               options={rosterLogoSelectOptions}
               onValueChange={(value) => {
                 const rosterLogo = rosterLogoByValue.get(value);
-                updateAnnotation(selected.id, {
-                  assetId: rosterLogo?.logoAssetId ?? null,
-                });
+                void applyLogoAsset(rosterLogo?.logoAssetId ?? null);
               }}
               triggerClassName="h-12"
               renderValue={(option) =>
@@ -354,6 +400,7 @@ export function InspectorPanel({
                 <RosterLogoSelectRow
                   label={option.label}
                   logoAssetId={rosterLogoByValue.get(option.value)?.logoAssetId}
+                  muted={option.disabled}
                 />
               )}
             />
@@ -389,7 +436,7 @@ export function InspectorPanel({
                     filename: file.name,
                     folder: `properties/${propertyId}/logos`,
                   });
-                  updateAnnotation(selected.id, { assetId: asset.id });
+                  await applyLogoAsset(asset.id);
                 } finally {
                   setUploadingLogo(false);
                 }
@@ -410,21 +457,21 @@ export function InspectorPanel({
             </div>
           ) : null}
           <Field label="Link existing space">
-            <Select
+            <CustomSelect
               value={selected.spaceId ?? ""}
-              onChange={(e) =>
+              onValueChange={(value) =>
                 updateAnnotation(selected.id, {
-                  spaceId: e.target.value || null,
+                  spaceId: value || null,
                 })
               }
-            >
-              <option value="">Not bound</option>
-              {spaces.map((s) => (
-                <option key={s.id} value={s.id}>
-                  Suite {s.suiteNumber}
-                </option>
-              ))}
-            </Select>
+              options={[
+                { value: "", label: "Not bound" },
+                ...spaces.map((s) => ({
+                  value: s.id,
+                  label: `Suite ${s.suiteNumber}`,
+                })),
+              ]}
+            />
           </Field>
           <div className="grid grid-cols-2 gap-2">
             <Field label="New suite #">
@@ -488,9 +535,11 @@ export function InspectorPanel({
 function RosterLogoSelectRow({
   label,
   logoAssetId,
+  muted,
 }: {
   label: string;
-  logoAssetId?: string;
+  logoAssetId?: string | null;
+  muted?: boolean;
 }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -504,7 +553,10 @@ function RosterLogoSelectRow({
           />
         </span>
       ) : null}
-      <span className="min-w-0 truncate">{label}</span>
+      <span className={cn("min-w-0 truncate", muted ? "text-slate-400" : undefined)}>
+        {label}
+        {muted ? " - no logo" : ""}
+      </span>
     </span>
   );
 }

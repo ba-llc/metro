@@ -217,9 +217,9 @@ export class GoogleFaviconResolver implements LogoResolver {
     const url = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=256`;
     const got = await fetchImage(url);
     if (!got) return null;
-    // Google's "unknown domain" placeholder is the same globe icon every
-    // time and is small. Anything ≥ 2KB is a real per-domain favicon.
-    if (got.body.byteLength < 2048) return null;
+    // Some legitimate favicons are tiny, especially local/regional tenants.
+    // The generic placeholder is filtered earlier by the minimum image size.
+    if (got.body.byteLength < MIN_IMAGE_BYTES) return null;
     return {
       source: "GOOGLE_FAVICON",
       body: got.body,

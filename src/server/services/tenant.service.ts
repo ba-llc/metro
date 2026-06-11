@@ -53,7 +53,7 @@ export async function createTenant(ctx: OrgContext, input: TenantCreateInput) {
       category: input.category,
       website: input.website || null,
       logoAssetId: input.logoAssetId,
-      logoStatus: input.logoAssetId ? "PENDING" : "NONE",
+      logoStatus: input.logoAssetId ? "APPROVED" : "NONE",
       organizationId: ctx.organizationId,
     },
   });
@@ -286,9 +286,8 @@ async function libraryLogoLookup(
 }
 
 /**
- * Run the resolver chain for a tenant and store the result. The logo
- * lands in PENDING status — the user always explicitly approves before
- * the logo is considered "blessed" for marketing surfaces.
+ * Run the resolver chain for a tenant and store the result. Found logos are
+ * immediately usable; users can replace or remove them if the match is wrong.
  */
 export async function resolveLogoFor(ctx: OrgContext, tenantId: string) {
   const tenant = await getTenant(ctx, tenantId);
@@ -301,7 +300,7 @@ export async function resolveLogoFor(ctx: OrgContext, tenantId: string) {
       data: {
         logoAssetId: libraryHitAssetId,
         logoSource: "LIBRARY",
-        logoStatus: "PENDING",
+        logoStatus: "APPROVED",
       },
     });
   }
@@ -324,7 +323,7 @@ export async function resolveLogoFor(ctx: OrgContext, tenantId: string) {
     data: {
       logoAssetId: asset.id,
       logoSource: hit.source,
-      logoStatus: "PENDING",
+      logoStatus: "APPROVED",
     },
   });
 }
@@ -344,7 +343,7 @@ export async function rejectLogo(ctx: OrgContext, tenantId: string) {
   const tenant = await getTenant(ctx, tenantId);
   return db.tenant.update({
     where: { id: tenant.id },
-    data: { logoAssetId: null, logoSource: null, logoStatus: "REJECTED" },
+    data: { logoAssetId: null, logoSource: null, logoStatus: "NONE" },
   });
 }
 
@@ -363,7 +362,7 @@ export async function setManualLogo(
     data: {
       logoAssetId: assetId,
       logoSource: "MANUAL",
-      logoStatus: "PENDING",
+      logoStatus: "APPROVED",
     },
   });
 }

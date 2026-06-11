@@ -16,7 +16,7 @@ export default async function AppLayout({
         name={session.user.name ?? ""}
         email={session.user.email ?? ""}
       />
-      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-8">
+      <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 py-8 [scrollbar-gutter:stable]">
         {children}
       </main>
     </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useState } from "react";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
@@ -9,7 +8,10 @@ import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/empty-state";
 import { assetUrl } from "@/lib/api";
 import { formatDate, labelize } from "@/lib/utils";
-import { PropertyNav } from "@/features/properties/components/property-nav";
+import {
+  PropertyTabSection,
+  PropertyWorkspaceShell,
+} from "@/features/properties/components/property-workspace-shell";
 import {
   useGeocodeProperty,
   usePropertyDetail,
@@ -71,8 +73,27 @@ export default function MapsPage({
     null;
 
   return (
-    <div>
-      <PageHeader
+    <PropertyWorkspaceShell
+      propertyId={propertyId}
+      banner={
+        !geocoded && property ? (
+          <div className="mb-6 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-sm text-amber-800">
+              Geocode the property address before generating maps.
+            </p>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={geocode.isPending}
+              onClick={() => geocode.mutate()}
+            >
+              Geocode Address
+            </Button>
+          </div>
+        ) : null
+      }
+    >
+      <PropertyTabSection
         title="Maps"
         subtitle="Declarative map specs — every artifact is regenerable from its parameters."
         actions={
@@ -84,26 +105,6 @@ export default function MapsPage({
           </Button>
         }
       />
-      <PropertyNav propertyId={propertyId} />
-
-      {!geocoded && property ? (
-        <div className="mb-6 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-800">
-            Geocode the property address before generating maps.
-          </p>
-          <Button
-            size="sm"
-            variant="secondary"
-            loading={geocode.isPending}
-            onClick={() => geocode.mutate()}
-          >
-            Geocode Address
-          </Button>
-        </div>
-      ) : null}
-      {geocode.error ? (
-        <p className="mb-4 text-sm text-red-600">{geocode.error.message}</p>
-      ) : null}
 
       {isLoading ? (
         <Spinner label="Loading maps..." />
@@ -198,6 +199,6 @@ export default function MapsPage({
           onSubmit={handleSubmit}
         />
       </Modal>
-    </div>
+    </PropertyWorkspaceShell>
   );
 }

@@ -2,13 +2,15 @@
 
 import { use, useRef, useState } from "react";
 import Link from "next/link";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/empty-state";
 import { formatDate } from "@/lib/utils";
-import { PropertyNav } from "@/features/properties/components/property-nav";
+import {
+  PropertyTabSection,
+  PropertyWorkspaceShell,
+} from "@/features/properties/components/property-workspace-shell";
 import {
   useDeleteSitePlan,
   useSitePlans,
@@ -46,8 +48,8 @@ export default function SitePlansPage({
   }
 
   return (
-    <div>
-      <PageHeader
+    <PropertyWorkspaceShell propertyId={propertyId}>
+      <PropertyTabSection
         title="Site Plans"
         subtitle="Property document library — store originals here and open Site Plan Studio to annotate."
         actions={
@@ -59,7 +61,6 @@ export default function SitePlansPage({
           </Button>
         }
       />
-      <PropertyNav propertyId={propertyId} />
 
       <input
         ref={inputRef}
@@ -149,6 +150,6 @@ export default function SitePlansPage({
           ))}
         </div>
       )}
-    </div>
+    </PropertyWorkspaceShell>
   );
 }

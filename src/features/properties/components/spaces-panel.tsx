@@ -6,7 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
+import { ControlledSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { StatusBadge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ function SpaceForm({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<SpaceCreateInput>({
     resolver: zodResolver(spaceCreateSchema),
@@ -53,22 +55,24 @@ function SpaceForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Field label="Space type">
-          <Select {...register("spaceType")}>
-            {spaceTypes.map((t) => (
-              <option key={t} value={t}>
-                {labelize(t)}
-              </option>
-            ))}
-          </Select>
+          <ControlledSelect
+            name="spaceType"
+            control={control}
+            options={spaceTypes.map((t) => ({
+              value: t,
+              label: labelize(t),
+            }))}
+          />
         </Field>
         <Field label="Status">
-          <Select {...register("status")}>
-            {spaceStatuses.map((s) => (
-              <option key={s} value={s}>
-                {labelize(s)}
-              </option>
-            ))}
-          </Select>
+          <ControlledSelect
+            name="status"
+            control={control}
+            options={spaceStatuses.map((s) => ({
+              value: s,
+              label: labelize(s),
+            }))}
+          />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -76,12 +80,16 @@ function SpaceForm({
           <Input type="number" step="0.01" placeholder="24.00" {...register("askingRate")} />
         </Field>
         <Field label="Rate type">
-          <Select {...register("rateType")}>
-            <option value="">—</option>
-            <option value="NNN">NNN</option>
-            <option value="Gross">Gross</option>
-            <option value="FS">Full Service</option>
-          </Select>
+          <ControlledSelect
+            name="rateType"
+            control={control}
+            options={[
+              { value: "", label: "—" },
+              { value: "NNN", label: "NNN" },
+              { value: "Gross", label: "Gross" },
+              { value: "FS", label: "Full Service" },
+            ]}
+          />
         </Field>
       </div>
       <Field label="Notes" error={errors.notes?.message}>

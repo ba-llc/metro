@@ -1,14 +1,16 @@
 "use client";
 
 import { use, useState } from "react";
-import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Badge, StatusBadge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/empty-state";
 import { cn, formatDate, labelize } from "@/lib/utils";
-import { PropertyNav } from "@/features/properties/components/property-nav";
+import {
+  PropertyTabSection,
+  PropertyWorkspaceShell,
+} from "@/features/properties/components/property-workspace-shell";
 import {
   useDeleteDocument,
   useDocuments,
@@ -467,15 +469,14 @@ export default function MarketingPage({
     ) ?? false;
 
   return (
-    <div>
-      <PageHeader
+    <PropertyWorkspaceShell propertyId={propertyId}>
+      <PropertyTabSection
         title="Marketing"
         subtitle="Shareable links and downloadable PDFs are generated from the property record. Live websites update in place; PDFs keep version history."
         actions={
           <Button onClick={() => setGenerateOpen(true)}>Generate Document</Button>
         }
       />
-      <PropertyNav propertyId={propertyId} />
 
       {sitePath ? (
         <ShareLinkRow
@@ -577,6 +578,6 @@ export default function MarketingPage({
           </div>
         </div>
       </Modal>
-    </div>
+    </PropertyWorkspaceShell>
   );
 }

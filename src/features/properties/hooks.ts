@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -12,7 +13,6 @@ import type {
   OccupancyCreateInput,
   PhotoCreateInput,
   PropertyCreateInput,
-  PropertyPlaceSearchInput,
   PropertyUpdateInput,
   SpaceCreateInput,
   SpaceUpdateInput,
@@ -70,14 +70,44 @@ export function useCreateProperty() {
   });
 }
 
-export function useSearchPropertyPlaces() {
-  return useMutation({
-    mutationFn: (input: PropertyPlaceSearchInput) =>
+const PLACE_SEARCH_DEBOUNCE_MS = 300;
+
+/** Debounced Google Places autocomplete for the property form. */
+export function usePropertyPlaceSearch(query: string) {
+  const trimmed = query.trim();
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    if (trimmed.length < 3) {
+      setDebouncedQuery("");
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setDebouncedQuery(trimmed),
+      PLACE_SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [trimmed]);
+
+  const search = useQuery({
+    queryKey: ["property-place-search", debouncedQuery],
+    queryFn: () =>
       apiFetch<DiscoveredPlaceRecord[]>("/api/properties/place-search", {
         method: "POST",
-        json: input,
+        json: { query: debouncedQuery, maxResults: 5 },
       }),
+    enabled: debouncedQuery.length >= 3,
+    staleTime: 60_000,
   });
+
+  return {
+    results: search.data ?? [],
+    isSearching:
+      search.isFetching ||
+      (trimmed.length >= 3 && trimmed !== debouncedQuery),
+    error: search.error,
+    showDropdown: trimmed.length >= 3,
+  };
 }
 
 export function useUpdateProperty(propertyId: string) {

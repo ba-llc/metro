@@ -9,6 +9,12 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import {
+  Controller,
+  type Control,
+  type FieldPath,
+  type FieldValues,
+} from "react-hook-form";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +32,7 @@ type MenuPosition = {
 };
 
 type CustomSelectProps<Value extends string> = {
-  label: string;
+  label?: string;
   value: Value;
   options: readonly CustomSelectOption<Value>[];
   onValueChange: (value: Value) => void;
@@ -73,6 +79,7 @@ export function CustomSelect<Value extends string>({
   const listboxId = `${id}-listbox`;
   const activeOption = options[activeIndex];
   const activeOptionId = activeOption ? `${id}-option-${activeIndex}` : undefined;
+  const triggerLabelledBy = label ? `${labelId} ${id}-value` : `${id}-value`;
 
   useEffect(() => {
     if (!open) return;
@@ -218,7 +225,7 @@ export function CustomSelect<Value extends string>({
             ref={menuRef}
             id={listboxId}
             role="listbox"
-            aria-labelledby={labelId}
+            aria-labelledby={label ? labelId : undefined}
             className="fixed z-50 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-900 shadow-lg ring-1 ring-slate-900/5"
             style={{
               top: position.top,
@@ -280,12 +287,14 @@ export function CustomSelect<Value extends string>({
 
   return (
     <div className={cn("block", className)}>
-      <span
-        id={labelId}
-        className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-600"
-      >
-        {label}
-      </span>
+      {label ? (
+        <span
+          id={labelId}
+          className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-600"
+        >
+          {label}
+        </span>
+      ) : null}
       <button
         ref={triggerRef}
         type="button"
@@ -294,7 +303,7 @@ export function CustomSelect<Value extends string>({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-activedescendant={open ? activeOptionId : undefined}
-        aria-labelledby={`${labelId} ${id}-value`}
+        aria-labelledby={triggerLabelledBy}
         disabled={disabled}
         className={cn(
           "flex h-10 w-full items-center justify-between gap-2 rounded-md border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 shadow-sm transition-colors",
@@ -327,5 +336,46 @@ export function CustomSelect<Value extends string>({
       </button>
       {menu}
     </div>
+  );
+}
+
+/** React Hook Form bridge — use inside `Field` (Field supplies the visible label). */
+export function ControlledSelect<
+  TFieldValues extends FieldValues,
+  TValue extends string = string,
+>({
+  name,
+  control,
+  options,
+  disabled,
+  className,
+  triggerClassName,
+  parse,
+}: {
+  name: FieldPath<TFieldValues>;
+  control: Control<TFieldValues>;
+  options: readonly CustomSelectOption<TValue>[];
+  disabled?: boolean;
+  className?: string;
+  triggerClassName?: string;
+  parse?: (value: TValue) => unknown;
+}) {
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field }) => (
+        <CustomSelect
+          value={(field.value == null ? "" : String(field.value)) as TValue}
+          options={options}
+          onValueChange={(value) =>
+            field.onChange(parse ? parse(value) : value)
+          }
+          disabled={disabled}
+          className={className}
+          triggerClassName={triggerClassName}
+        />
+      )}
+    />
   );
 }

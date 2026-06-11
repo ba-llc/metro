@@ -5,7 +5,8 @@ import { useForm } from "react-hook-form";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
+import { ControlledSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -59,7 +60,7 @@ export function DemographicsPanel({
   const [open, setOpen] = useState(false);
   const addDemographics = useAddDemographics(propertyId);
   const autoFetch = useAutoFetchDemographics(propertyId);
-  const { register, handleSubmit, reset } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control } = useForm<FormValues>({
     defaultValues: { radiusMiles: 1 },
   });
 
@@ -170,11 +171,16 @@ export function DemographicsPanel({
       <Modal open={open} onClose={() => setOpen(false)} title="Add Demographic Dataset">
         <form onSubmit={onSubmit} className="space-y-4">
           <Field label="Radius">
-            <Select {...register("radiusMiles", { valueAsNumber: true })}>
-              <option value={1}>1 Mile</option>
-              <option value={3}>3 Mile</option>
-              <option value={5}>5 Mile</option>
-            </Select>
+            <ControlledSelect
+              name="radiusMiles"
+              control={control}
+              parse={(value) => Number(value)}
+              options={[
+                { value: "1", label: "1 Mile" },
+                { value: "3", label: "3 Mile" },
+                { value: "5", label: "5 Mile" },
+              ]}
+            />
           </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Population">

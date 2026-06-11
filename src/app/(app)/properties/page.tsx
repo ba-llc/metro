@@ -4,7 +4,8 @@ import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
+import { CustomSelect } from "@/components/ui/custom-select";
 import { EmptyState, Spinner } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
 import { labelize } from "@/lib/utils";
@@ -35,7 +36,7 @@ function PropertiesPageInner() {
   const createProperty = useCreateProperty();
 
   return (
-    <div>
+    <div className="mx-auto max-w-6xl">
       <PageHeader
         title="Properties"
         subtitle="Every marketing asset starts with a property record."
@@ -51,18 +52,15 @@ function PropertiesPageInner() {
           onChange={(e) => setQ(e.target.value)}
           className="max-w-xs"
         />
-        <Select
+        <CustomSelect
           value={propertyType}
-          onChange={(e) => setPropertyType(e.target.value)}
+          onValueChange={setPropertyType}
           className="max-w-48"
-        >
-          <option value="">All types</option>
-          {propertyTypes.map((t) => (
-            <option key={t} value={t}>
-              {labelize(t)}
-            </option>
-          ))}
-        </Select>
+          options={[
+            { value: "", label: "All types" },
+            ...propertyTypes.map((t) => ({ value: t, label: labelize(t) })),
+          ]}
+        />
       </div>
 
       {isLoading ? (

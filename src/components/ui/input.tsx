@@ -13,6 +13,7 @@ export const Input = forwardRef<
   );
 });
 
+/** Native select — prefer `CustomSelect` for menus (OS-native popup on macOS). */
 export const Select = forwardRef<
   HTMLSelectElement,
   SelectHTMLAttributes<HTMLSelectElement>

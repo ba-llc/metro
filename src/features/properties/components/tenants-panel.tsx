@@ -8,13 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { formatSF } from "@/lib/utils";
 import { occupancyCreateSchema, type OccupancyCreateInput } from "../schemas";
 import { useCreateOccupancy, useDeleteOccupancy } from "../hooks";
 import type { OccupancyRecord } from "../types";
-import { TenantLogoCell } from "./tenant-logo-cell";
+import { TenantRosterItem } from "./tenant-roster-item";
 import { TenantDiscoverModal } from "./tenant-discover-modal";
 
 export function TenantsPanel({
@@ -69,7 +67,7 @@ export function TenantsPanel({
           </div>
         }
       />
-      <CardContent>
+      <CardContent className="px-4 py-3">
         {occupancies.length === 0 ? (
           <EmptyState
             title="No tenants yet"
@@ -78,37 +76,15 @@ export function TenantsPanel({
         ) : (
           <ul className="divide-y divide-slate-100">
             {occupancies.map((o) => (
-              <li
+              <TenantRosterItem
                 key={o.id}
-                className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0"
-              >
-                <TenantLogoCell
-                  tenant={o.tenant}
-                  meta={
-                    <>
-                      {o.isAnchor ? <Badge tone="blue">Anchor</Badge> : null}
-                      {o.suiteNumber ? (
-                        <span className="text-xs font-medium text-slate-500">
-                          Suite {o.suiteNumber}
-                        </span>
-                      ) : null}
-                      {o.squareFootage ? (
-                        <span className="text-xs font-medium text-slate-500">
-                          {formatSF(o.squareFootage)}
-                        </span>
-                      ) : null}
-                    </>
-                  }
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  onClick={() => deleteOccupancy.mutate(o.id)}
-                >
-                  Remove
-                </Button>
-              </li>
+                tenant={o.tenant}
+                isAnchor={o.isAnchor}
+                suiteNumber={o.suiteNumber}
+                squareFootage={o.squareFootage}
+                onRemove={() => deleteOccupancy.mutate(o.id)}
+                removing={deleteOccupancy.isPending}
+              />
             ))}
           </ul>
         )}

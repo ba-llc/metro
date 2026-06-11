@@ -10,10 +10,11 @@ import {
   type PropertyCreateInput,
 } from "../schemas";
 import { Button } from "@/components/ui/button";
-import { Input, Select, Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
+import { ControlledSelect } from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
 import { labelize } from "@/lib/utils";
-import { useSearchPropertyPlaces } from "../hooks";
+import { usePropertyPlaceSearch } from "../hooks";
 import type { DiscoveredPlaceRecord } from "../types";
 
 function componentText(
@@ -70,12 +71,12 @@ export function PropertyForm({
   enablePlaceSearch?: boolean;
 }) {
   const [placeQuery, setPlaceQuery] = useState("");
-  const [placeResults, setPlaceResults] = useState<DiscoveredPlaceRecord[]>([]);
-  const searchPlaces = useSearchPropertyPlaces();
+  const placeSearch = usePropertyPlaceSearch(placeQuery);
   const {
     register,
     handleSubmit,
     setValue,
+    control,
     formState: { errors },
   } = useForm<PropertyCreateInput>({
     resolver: zodResolver(propertyCreateSchema),
@@ -85,14 +86,6 @@ export function PropertyForm({
       ...defaultValues,
     },
   });
-
-  async function runPlaceSearch() {
-    const results = await searchPlaces.mutateAsync({
-      query: placeQuery,
-      maxResults: 5,
-    });
-    setPlaceResults(results);
-  }
 
   function applyPlace(place: DiscoveredPlaceRecord) {
     const address = addressFromPlace(place);
@@ -144,7 +137,6 @@ export function PropertyForm({
     if (place.phoneNumber) {
       setValue("phoneNumber", place.phoneNumber, { shouldDirty: true });
     }
-    setPlaceResults([]);
     setPlaceQuery(place.name);
   }
 
@@ -153,48 +145,57 @@ export function PropertyForm({
       {enablePlaceSearch ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
           <Field label="Search Google Places">
-            <div className="flex gap-2">
+            <div className="relative">
               <Input
                 value={placeQuery}
                 onChange={(e) => setPlaceQuery(e.target.value)}
                 placeholder="Search a property, shopping center, or business name"
+                autoComplete="off"
+                aria-autocomplete="list"
+                aria-expanded={placeSearch.showDropdown}
               />
-              <Button
-                type="button"
-                variant="secondary"
-                loading={searchPlaces.isPending}
-                disabled={placeQuery.trim().length < 3}
-                onClick={runPlaceSearch}
-              >
-                Search
-              </Button>
+              {placeSearch.isSearching ? (
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-slate-400">
+                  Searching…
+                </span>
+              ) : null}
             </div>
           </Field>
-          {searchPlaces.error ? (
+          {placeSearch.error ? (
             <p className="mt-2 text-xs text-red-600">
-              {searchPlaces.error.message}
+              {placeSearch.error.message}
             </p>
           ) : null}
-          {placeResults.length ? (
-            <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
-              {placeResults.map((place) => (
-                <button
-                  key={place.placeId}
-                  type="button"
-                  className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50"
-                  onClick={() => applyPlace(place)}
-                >
-                  <span className="block text-sm font-medium text-slate-800">
-                    {place.name}
-                  </span>
-                  {place.formattedAddress ? (
-                    <span className="block text-xs text-slate-500">
-                      {place.formattedAddress}
+          {placeSearch.showDropdown ? (
+            placeSearch.isSearching ? null : placeSearch.results.length ? (
+              <div className="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
+                {placeSearch.results.map((place) => (
+                  <button
+                    key={place.placeId}
+                    type="button"
+                    className="block w-full border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50"
+                    onClick={() => applyPlace(place)}
+                  >
+                    <span className="block text-sm font-medium text-slate-800">
+                      {place.name}
                     </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
+                    {place.formattedAddress ? (
+                      <span className="block text-xs text-slate-500">
+                        {place.formattedAddress}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">
+                No places found. Try a different name or address.
+              </p>
+            )
+          ) : placeQuery.trim().length > 0 && placeQuery.trim().length < 3 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Type at least 3 characters to search.
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -205,22 +206,24 @@ export function PropertyForm({
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Property type" error={errors.propertyType?.message}>
-          <Select {...register("propertyType")}>
-            {propertyTypes.map((t) => (
-              <option key={t} value={t}>
-                {labelize(t)}
-              </option>
-            ))}
-          </Select>
+          <ControlledSelect
+            name="propertyType"
+            control={control}
+            options={propertyTypes.map((t) => ({
+              value: t,
+              label: labelize(t),
+            }))}
+          />
         </Field>
         <Field label="Status" error={errors.status?.message}>
-          <Select {...register("status")}>
-            {propertyStatuses.map((s) => (
-              <option key={s} value={s}>
-                {labelize(s)}
-              </option>
-            ))}
-          </Select>
+          <ControlledSelect
+            name="status"
+            control={control}
+            options={propertyStatuses.map((s) => ({
+              value: s,
+              label: labelize(s),
+            }))}
+          />
         </Field>
       </div>
 

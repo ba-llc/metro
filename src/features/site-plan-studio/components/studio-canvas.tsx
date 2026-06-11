@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 import {
   ChevronDown,
   LocateFixed,
@@ -27,11 +33,17 @@ export function StudioCanvas({
   resolveLabel,
   stageRef,
   mode,
+  logoDropEnabled,
+  symbolDropEnabled,
+  logoPlacementRequest,
 }: {
   page: SitePlanPageDetail;
   resolveLabel: (a: AnnotationData) => string;
   stageRef: React.RefObject<Konva.Stage | null>;
   mode: StudioMode;
+  logoDropEnabled: boolean;
+  symbolDropEnabled: boolean;
+  logoPlacementRequest: { id: number; assetId: string } | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -40,6 +52,7 @@ export function StudioCanvas({
   const [containerSize, setContainerSize] = useState({ width: page.width, height: page.height });
   const [spacePan, setSpacePan] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const handledLogoPlacementRequest = useRef<number | null>(null);
   const panStartRef = useRef<{ pointer: Point; pan: Point } | null>(null);
 
   const layers = useStudioStore((s) => s.layers);
@@ -80,6 +93,11 @@ export function StudioCanvas({
     () => [...annotations, ...reviewAnnotations],
     [annotations, reviewAnnotations],
   );
+  const selectedAnnotation = useMemo(
+    () => allAnnotations.find((a) => a.id === selectedId) ?? null,
+    [allAnnotations, selectedId],
+  );
+  const selectedIsTenantLogo = selectedAnnotation?.type === "tenant-logo";
 
   useEffect(() => {
     const el = containerRef.current;
@@ -114,13 +132,12 @@ export function StudioCanvas({
     const transformer = transformerRef.current;
     const stage = stageRef.current;
     if (!transformer || !stage) return;
-    const selected = allAnnotations.find((a) => a.id === selectedId);
     const isRect =
-      selected &&
-      (selected.type === "rectangle" ||
-        selected.type === "pad-site" ||
-        selected.type === "dashed-outline" ||
-        selected.type === "tenant-logo");
+      selectedAnnotation &&
+      (selectedAnnotation.type === "rectangle" ||
+        selectedAnnotation.type === "pad-site" ||
+        selectedAnnotation.type === "dashed-outline" ||
+        selectedAnnotation.type === "tenant-logo");
     if (selectedId && isRect) {
       const node = stage.findOne(`#${selectedId}`);
       transformer.nodes(node ? [node] : []);
@@ -128,7 +145,7 @@ export function StudioCanvas({
       transformer.nodes([]);
     }
     transformer.getLayer()?.batchDraw();
-  }, [selectedId, allAnnotations, stageRef]);
+  }, [selectedId, selectedAnnotation, stageRef]);
 
   function pointerPagePos(): Point | null {
     const stage = stageRef.current;
@@ -138,6 +155,92 @@ export function StudioCanvas({
       x: (pos.x - pan.x) / scale / pageW,
       y: (pos.y - pan.y) / scale / pageH,
     };
+  }
+
+  function containerPointToPagePoint(point: Point): Point {
+    return {
+      x: (point.x - pan.x) / scale / pageW,
+      y: (point.y - pan.y) / scale / pageH,
+    };
+  }
+
+  function clampPoint(point: Point): Point {
+    return {
+      x: Math.min(Math.max(point.x, 0), 1),
+      y: Math.min(Math.max(point.y, 0), 1),
+    };
+  }
+
+  async function imageAspect(assetId: string): Promise<number> {
+    const image = new window.Image();
+    image.src = assetUrl(assetId);
+    await image.decode().catch(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("Logo image failed to load"));
+        }),
+    );
+    return image.naturalWidth > 0 && image.naturalHeight > 0
+      ? image.naturalWidth / image.naturalHeight
+      : 1;
+  }
+
+  async function addLogoAt(assetId: string, center: Point) {
+    const aspect = await imageAspect(assetId).catch(() => 1);
+    const w = Math.min(0.12, Math.max(0.045, 0.07 * Math.min(aspect, 1.8)));
+    const h = Math.min(0.12, Math.max(0.035, w / aspect));
+    const clamped = clampPoint(center);
+    addAnnotation({
+      type: "tenant-logo",
+      geometry: {
+        rect: {
+          x: Math.min(Math.max(clamped.x - w / 2, 0), 1 - w),
+          y: Math.min(Math.max(clamped.y - h / 2, 0), 1 - h),
+          w,
+          h,
+        },
+      },
+      style: {},
+      label: null,
+      assetId,
+    });
+  }
+
+  useEffect(() => {
+    if (!logoPlacementRequest) return;
+    if (handledLogoPlacementRequest.current === logoPlacementRequest.id) return;
+    handledLogoPlacementRequest.current = logoPlacementRequest.id;
+    const el = containerRef.current;
+    if (!el) return;
+    void addLogoAt(
+      logoPlacementRequest.assetId,
+      containerPointToPagePoint({
+        x: el.clientWidth / 2,
+        y: el.clientHeight / 2,
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logoPlacementRequest]);
+
+  function addSymbolAt(text: string, point: Point) {
+    const clamped = clampPoint(point);
+    addAnnotation({
+      type: "directional-indicator",
+      geometry: { points: [clamped] },
+      style: { fontSize: 26, color: "#0f172a" },
+      label: { text },
+    });
+  }
+
+  function supportsDrop(event: DragEvent<HTMLDivElement>) {
+    const types = Array.from(event.dataTransfer.types);
+    return (
+      (logoDropEnabled &&
+        types.includes("application/x-metro-logo-asset")) ||
+      (symbolDropEnabled &&
+        types.includes("application/x-metro-symbol"))
+    );
   }
 
   function fitToScreen() {
@@ -245,12 +348,7 @@ export function StudioCanvas({
 
     if (tool.mode === "point") {
       if (tool.id === "tenant-logo") {
-        addAnnotation({
-          type: "tenant-logo",
-          geometry: { rect: { x: pos.x, y: pos.y, w: 0.1, h: 0.05 } },
-          style: tool.defaultStyle,
-          label: null,
-        });
+        return;
       } else {
         addAnnotation({
           type: tool.id as AnnotationData["type"],
@@ -328,6 +426,28 @@ export function StudioCanvas({
       className="relative h-full overflow-hidden bg-slate-200"
       style={{
         cursor: panMode ? (isPanning ? "grabbing" : "grab") : tool.mode === "select" ? "default" : "crosshair",
+      }}
+      onDragOver={(event) => {
+        if (!supportsDrop(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={(event) => {
+        const assetId = event.dataTransfer.getData("application/x-metro-logo-asset");
+        const symbol = event.dataTransfer.getData("application/x-metro-symbol");
+        if (!supportsDrop(event) || (!assetId && !symbol)) return;
+        event.preventDefault();
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const point = containerPointToPagePoint({
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+        });
+        if (assetId) {
+          void addLogoAt(assetId, point);
+        } else if (symbol) {
+          addSymbolAt(symbol, point);
+        }
       }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.85),transparent_30rem),linear-gradient(135deg,#dfe8f2,#f8fbfd)]" />
@@ -446,11 +566,25 @@ export function StudioCanvas({
         <Layer>
           <Transformer
             ref={transformerRef}
-            rotateEnabled
+            rotateEnabled={!selectedIsTenantLogo}
             flipEnabled={false}
-            boundBoxFunc={(oldBox, newBox) =>
-              newBox.width < 5 || newBox.height < 5 ? oldBox : newBox
+            keepRatio={selectedIsTenantLogo}
+            enabledAnchors={
+              selectedIsTenantLogo
+                ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+                : undefined
             }
+            boundBoxFunc={(oldBox, newBox) => {
+              if (newBox.width < 5 || newBox.height < 5) return oldBox;
+              if (!selectedIsTenantLogo) return newBox;
+              const ratio = oldBox.width / oldBox.height || 1;
+              const side = Math.max(Math.abs(newBox.width), Math.abs(newBox.height) * ratio);
+              return {
+                ...newBox,
+                width: side,
+                height: side / ratio,
+              };
+            }}
           />
         </Layer>
       </Stage>
