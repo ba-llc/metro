@@ -49,13 +49,13 @@ export default function SitePlansPage({
     <div>
       <PageHeader
         title="Site Plans"
-        subtitle="Originals are stored immutably — all markup lives in editable annotation layers."
+        subtitle="Property document library — store originals here and open Site Plan Studio to annotate."
         actions={
           <Button
             loading={upload.isPending}
             onClick={() => inputRef.current?.click()}
           >
-            Upload Site Plan PDF
+            Upload PDF
           </Button>
         }
       />
@@ -81,13 +81,13 @@ export default function SitePlansPage({
       ) : !sitePlans || sitePlans.length === 0 ? (
         <EmptyState
           title="No site plans yet"
-          description="Upload an engineering site plan PDF. Pages become editable canvases where drawn spaces bind to property records."
+          description="Upload engineering site plan PDFs to the property library. When a plan is ready, open it in Site Plan Studio to annotate spaces."
           action={
             <Button
               loading={upload.isPending}
               onClick={() => inputRef.current?.click()}
             >
-              Upload Site Plan PDF
+              Upload PDF
             </Button>
           }
         />
@@ -105,9 +105,13 @@ export default function SitePlansPage({
                   {formatDate(plan.createdAt)}
                 </p>
                 <div className="mt-4 flex gap-2">
-                  <Link href={`/properties/${propertyId}/site-plans/${plan.id}`}>
-                    <Button size="sm" disabled={plan.status !== "READY"}>
-                      Open in Studio
+                  <Link href={`/properties/${propertyId}/studio/${plan.id}`}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={plan.status !== "READY"}
+                    >
+                      Edit in Studio
                     </Button>
                   </Link>
                   <Button

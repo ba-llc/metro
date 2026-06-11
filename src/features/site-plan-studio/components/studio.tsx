@@ -1,20 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import type Konva from "konva";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/empty-state";
-import { cn, formatDate, formatRate } from "@/lib/utils";
+import { formatDate, formatRate } from "@/lib/utils";
 import { uploadAsset } from "@/lib/api";
 import type { AnnotationData } from "@/types/annotations";
 import { usePropertyDetail } from "@/features/properties/hooks";
-import { tools } from "../tools";
+import type { SpaceRecord } from "@/features/properties/types";
 import { useStudioStore } from "../store";
 import {
+  useAnalyzeSitePlanPage,
   useCreateSnapshot,
   useRegisterExport,
   useRestoreSnapshot,
@@ -25,6 +25,16 @@ import {
 import { StudioCanvas } from "./studio-canvas";
 import { LayersPanel } from "./layers-panel";
 import { InspectorPanel } from "./inspector-panel";
+import {
+  RightPanelTabs,
+  StudioPanel,
+  StudioShell,
+  type RightPanelTab,
+  type StudioMode,
+} from "./studio-shell";
+import { ToolRail } from "./tool-rail";
+import { PagesPanel } from "./pages-panel";
+import { AiReviewPanel } from "./ai-review-panel";
 
 const SAVE_DEBOUNCE_MS = 1200;
 
@@ -40,10 +50,14 @@ export function Studio({
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const [snapshotName, setSnapshotName] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
+  const [mode, setMode] = useState<StudioMode>("edit");
+  const [rightTab, setRightTab] = useState<RightPanelTab>("inspect");
 
   const { data: plan, isLoading } = useSitePlanDetail(sitePlanId);
   const { data: property } = usePropertyDetail(propertyId);
   const saveAnnotations = useSaveAnnotations(sitePlanId);
+  const analyzePage = useAnalyzeSitePlanPage();
   const { data: snapshots } = useSnapshots(sitePlanId);
   const createSnapshot = useCreateSnapshot(sitePlanId);
   const restoreSnapshot = useRestoreSnapshot(sitePlanId);
@@ -55,6 +69,7 @@ export function Studio({
   const dirty = useStudioStore((s) => s.dirty);
   const markSaved = useStudioStore((s) => s.markSaved);
   const removeAnnotation = useStudioStore((s) => s.removeAnnotation);
+  const importSuggestionLayer = useStudioStore((s) => s.importSuggestionLayer);
   const workingAnnotations = useStudioStore((s) => s.annotations);
   const workingLayers = useStudioStore((s) => s.layers);
 
@@ -83,20 +98,6 @@ export function Studio({
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, page?.id, workingAnnotations, workingLayers]);
-
-  // Delete key removes the selection.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
-      if (e.key === "Delete" || e.key === "Backspace") {
-        const { selectedId } = useStudioStore.getState();
-        if (selectedId) removeAnnotation(selectedId);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [removeAnnotation]);
 
   /** Resolves label text — bound labels derive from the Space record. */
   const resolveLabel = useCallback(
@@ -143,110 +144,121 @@ export function Studio({
     }
   }
 
+  const analyzeCurrentPage = useCallback(() => {
+    if (!page) return;
+    setAnalysisMessage(null);
+    analyzePage.mutate(page.id, {
+      onSuccess: (result) => {
+        importSuggestionLayer(result.annotations);
+        const count = result.annotations.annotations.length;
+        const note = result.notes[0] ? ` ${result.notes[0]}` : "";
+        setMode("review");
+        setRightTab("layers");
+        setAnalysisMessage(
+          `Imported ${count} AI suggestion${count === 1 ? "" : "s"} from ${result.provider}.${note}`,
+        );
+      },
+      onError: (e) => {
+        setAnalysisMessage(e instanceof Error ? e.message : "Site plan analysis failed");
+      },
+    });
+  }, [analyzePage, importSuggestionLayer, page]);
+
+  // Delete key removes the selection; common tool shortcuts mirror the status bar.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const { selectedId } = useStudioStore.getState();
+        if (selectedId) removeAnnotation(selectedId);
+      }
+      const key = e.key.toLowerCase();
+      if (key === "v") setTool("select");
+      if (key === "h") setTool("pan");
+      if (key === "a") analyzeCurrentPage();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [analyzeCurrentPage, removeAnnotation, setTool]);
+
   if (isLoading || !plan || !page) {
     return <Spinner label="Loading studio..." />;
   }
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/properties/${propertyId}/site-plans`}
-            className="text-sm text-slate-500 hover:text-slate-800"
-          >
-            ← {plan.property.name}
-          </Link>
-          <span className="font-semibold text-slate-900">{plan.title}</span>
-          <span
-            className={cn(
-              "text-xs",
-              dirty || saveAnnotations.isPending
-                ? "text-amber-600"
-                : "text-emerald-600",
-            )}
-          >
-            {saveAnnotations.isPending
-              ? "Saving..."
-              : dirty
-                ? "Unsaved changes"
-                : "All changes saved"}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          {plan.pages.length > 1 ? (
-            <div className="flex items-center gap-1 text-sm">
-              {plan.pages.map((p, i) => (
-                <button
-                  key={p.id}
-                  onClick={() => setPageIndex(i)}
-                  className={cn(
-                    "rounded px-2 py-1",
-                    i === pageIndex
-                      ? "bg-brand-900 text-white"
-                      : "text-slate-600 hover:bg-slate-100",
-                  )}
-                >
-                  {p.pageNumber}
-                </button>
-              ))}
+    <StudioShell
+      propertyId={propertyId}
+      plan={plan}
+      pageIndex={pageIndex}
+      onPageChange={setPageIndex}
+      mode={mode}
+      onModeChange={setMode}
+      dirty={dirty}
+      saving={saveAnnotations.isPending}
+      analyzing={analyzePage.isPending}
+      exporting={exporting}
+      analysisMessage={analysisMessage}
+      onAnalyze={analyzeCurrentPage}
+      onVersions={() => setSnapshotsOpen(true)}
+      onExport={() => void exportFlattened()}
+      toolRail={
+        <ToolRail
+          activeToolId={activeToolId}
+          onToolChange={setTool}
+          onAnalyze={analyzeCurrentPage}
+          analyzing={analyzePage.isPending}
+        />
+      }
+      leftPanel={
+        <PagesPanel
+          plan={plan}
+          activeIndex={pageIndex}
+          onPageChange={setPageIndex}
+          onAnalyze={analyzeCurrentPage}
+          analyzing={analyzePage.isPending}
+        />
+      }
+      canvas={
+        <StudioCanvas
+          page={page}
+          resolveLabel={resolveLabel}
+          stageRef={stageRef}
+          mode={mode}
+        />
+      }
+      rightPanel={
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+          <RightPanelTabs active={rightTab} onChange={setRightTab} />
+          {mode === "review" ? (
+            <AiReviewPanel
+              onContinueEditing={() => {
+                setMode("edit");
+                setRightTab("inspect");
+              }}
+            />
+          ) : rightTab === "inspect" ? (
+            <div className="min-h-0 overflow-y-auto p-4">
+              <InspectorPanel propertyId={propertyId} spaces={spaces} />
             </div>
-          ) : null}
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setSnapshotsOpen(true)}
-          >
-            Versions
-          </Button>
-          <Button size="sm" loading={exporting} onClick={() => void exportFlattened()}>
-            Export PNG
-          </Button>
-        </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1">
-        {/* Tool palette */}
-        <div className="flex w-44 flex-col gap-1 overflow-y-auto border-r border-slate-200 bg-white p-2">
-          {tools.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={() => setTool(tool.id)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-left text-sm",
-                activeToolId === tool.id
-                  ? "bg-brand-900 text-white"
-                  : "text-slate-700 hover:bg-slate-100",
-              )}
+          ) : rightTab === "layers" ? (
+            <StudioPanel
+              title="Layers"
+              description="Organize overlays, lock review layers, and control visibility."
             >
-              {tool.label}
-              {tool.shortcut ? (
-                <span className="float-right text-xs opacity-50">
-                  {tool.shortcut}
-                </span>
-              ) : null}
-            </button>
-          ))}
-          <p className="mt-2 px-2 text-[11px] leading-4 text-slate-400">
-            Polygon tools: click to add points, press Enter to finish, Esc to
-            cancel.
-          </p>
+              <LayersPanel />
+            </StudioPanel>
+          ) : (
+            <StudioPanel
+              title="Property Data"
+              description="Reference record data while binding overlays."
+            >
+              <PropertyDataPanel spaces={spaces} />
+            </StudioPanel>
+          )}
         </div>
-
-        {/* Canvas */}
-        <div className="min-w-0 flex-1 overflow-auto p-4">
-          <StudioCanvas page={page} resolveLabel={resolveLabel} stageRef={stageRef} />
-        </div>
-
-        {/* Right rail */}
-        <div className="flex w-72 flex-col gap-6 overflow-y-auto border-l border-slate-200 bg-white p-4">
-          <InspectorPanel propertyId={propertyId} spaces={spaces} />
-          <div className="border-t border-slate-200 pt-4">
-            <LayersPanel />
-          </div>
-        </div>
-      </div>
+      }
+    >
 
       {/* Snapshots */}
       <Modal
@@ -304,6 +316,40 @@ export function Studio({
           </ul>
         )}
       </Modal>
+    </StudioShell>
+  );
+}
+
+function PropertyDataPanel({ spaces }: { spaces: SpaceRecord[] }) {
+  const available = spaces.filter((space) => space.status === "AVAILABLE");
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+        <p className="text-sm font-semibold text-slate-900">Spaces</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {spaces.length} total / {available.length} available
+        </p>
+      </div>
+      <div className="space-y-2">
+        {spaces.slice(0, 12).map((space) => (
+          <div
+            key={space.id}
+            className="rounded-xl border border-slate-200 bg-white p-3 text-sm"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-medium text-slate-900">Suite {space.suiteNumber}</p>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                {space.status}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              {space.squareFootage
+                ? `${space.squareFootage.toLocaleString()} SF`
+                : "No SF entered"}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

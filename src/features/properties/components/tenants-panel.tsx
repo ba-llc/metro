@@ -14,15 +14,20 @@ import { formatSF } from "@/lib/utils";
 import { occupancyCreateSchema, type OccupancyCreateInput } from "../schemas";
 import { useCreateOccupancy, useDeleteOccupancy } from "../hooks";
 import type { OccupancyRecord } from "../types";
+import { TenantLogoCell } from "./tenant-logo-cell";
+import { TenantDiscoverModal } from "./tenant-discover-modal";
 
 export function TenantsPanel({
   propertyId,
   occupancies,
+  geocoded,
 }: {
   propertyId: string;
   occupancies: OccupancyRecord[];
+  geocoded: boolean;
 }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [discoverOpen, setDiscoverOpen] = useState(false);
   const createOccupancy = useCreateOccupancy(propertyId);
   const deleteOccupancy = useDeleteOccupancy(propertyId);
 
@@ -50,30 +55,51 @@ export function TenantsPanel({
       <CardHeader
         title="Tenant Roster"
         action={
-          <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
-            Add Tenant
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setDiscoverOpen(true)}
+            >
+              Discover nearby
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setAddOpen(true)}>
+              Add Tenant
+            </Button>
+          </div>
         }
       />
       <CardContent>
         {occupancies.length === 0 ? (
           <EmptyState
             title="No tenants yet"
-            description="The tenant roster powers co-tenancy pages and logo grids in marketing packages."
+            description="Use 'Discover nearby' to pull in businesses around this address, or add a tenant manually."
           />
         ) : (
           <ul className="divide-y divide-slate-100">
             {occupancies.map((o) => (
-              <li key={o.id} className="flex items-center justify-between py-2.5">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-slate-800">{o.tenant.name}</span>
-                  {o.isAnchor ? <Badge tone="blue">Anchor</Badge> : null}
-                  {o.suiteNumber ? (
-                    <span className="text-xs text-slate-500">Suite {o.suiteNumber}</span>
-                  ) : null}
-                  {o.squareFootage ? (
-                    <span className="text-xs text-slate-500">{formatSF(o.squareFootage)}</span>
-                  ) : null}
+              <li
+                key={o.id}
+                className="grid grid-cols-[1fr_auto] items-start gap-3 py-3"
+              >
+                <div className="space-y-2">
+                  <TenantLogoCell tenant={o.tenant} />
+                  <div className="flex flex-wrap items-center gap-2 pl-[3.75rem]">
+                    <span className="font-medium text-slate-800">
+                      {o.tenant.name}
+                    </span>
+                    {o.isAnchor ? <Badge tone="blue">Anchor</Badge> : null}
+                    {o.suiteNumber ? (
+                      <span className="text-xs text-slate-500">
+                        Suite {o.suiteNumber}
+                      </span>
+                    ) : null}
+                    {o.squareFootage ? (
+                      <span className="text-xs text-slate-500">
+                        {formatSF(o.squareFootage)}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <Button
                   size="sm"
@@ -116,6 +142,13 @@ export function TenantsPanel({
           </div>
         </form>
       </Modal>
+
+      <TenantDiscoverModal
+        open={discoverOpen}
+        onClose={() => setDiscoverOpen(false)}
+        propertyId={propertyId}
+        geocoded={geocoded}
+      />
     </Card>
   );
 }

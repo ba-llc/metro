@@ -19,9 +19,12 @@ export function PropertyNav({ propertyId }: { propertyId: string }) {
     <nav className="mb-6 flex gap-1 border-b border-slate-200">
       {tabs.map((tab) => {
         const href = tab.segment ? `${base}/${tab.segment}` : base;
-        const active = tab.segment
-          ? pathname.startsWith(href)
-          : pathname === base;
+        const active =
+          tab.segment === ""
+            ? pathname === base
+            : tab.segment === "site-plans"
+              ? pathname === `${base}/site-plans`
+              : pathname.startsWith(href);
         return (
           <Link
             key={tab.label}

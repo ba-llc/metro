@@ -74,6 +74,41 @@ export const tenantCreateSchema = z.object({
   logoAssetId: z.string().optional(),
 });
 
+export const tenantUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  category: z.string().nullable().optional(),
+  website: z.string().url().nullable().optional().or(z.literal("")),
+});
+
+export const tenantDiscoverSchema = z.object({
+  radiusMeters: z.coerce.number().int().positive().max(50000).default(500),
+  maxResults: z.coerce.number().int().positive().max(20).default(20),
+  includedTypes: z.array(z.string()).optional(),
+});
+
+const discoveredPlaceSchema = z.object({
+  placeId: z.string().min(1),
+  name: z.string().min(1),
+  formattedAddress: z.string().optional(),
+  location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+  types: z.array(z.string()).default([]),
+  primaryType: z.string().optional(),
+  website: z.string().optional(),
+  phoneNumber: z.string().optional(),
+});
+
+export const tenantImportSchema = z.object({
+  places: z.array(discoveredPlaceSchema).min(1, "Select at least one tenant"),
+  /** When true, also create a TenantOccupancy row linking each imported
+   *  tenant to the property. Discovery surfaces nearby businesses that
+   *  may or may not actually lease at the property, so this defaults off. */
+  attachToProperty: z.boolean().default(false),
+});
+
+export const tenantManualLogoSchema = z.object({
+  assetId: z.string().min(1),
+});
+
 export const occupancyCreateSchema = z.object({
   tenantId: z.string().optional(),
   /** Provide to create the tenant inline */
@@ -91,6 +126,8 @@ export const contactCreateSchema = z.object({
   license: z.string().optional(),
 });
 
+export const contactUpdateSchema = contactCreateSchema.partial();
+
 export const photoCreateSchema = z.object({
   assetId: z.string().min(1),
   category: z.string().optional(),
@@ -102,6 +139,11 @@ export type PropertyUpdateInput = z.infer<typeof propertyUpdateSchema>;
 export type SpaceCreateInput = z.infer<typeof spaceCreateSchema>;
 export type SpaceUpdateInput = z.infer<typeof spaceUpdateSchema>;
 export type TenantCreateInput = z.infer<typeof tenantCreateSchema>;
+export type TenantUpdateInput = z.infer<typeof tenantUpdateSchema>;
+export type TenantDiscoverInput = z.infer<typeof tenantDiscoverSchema>;
+export type TenantImportInput = z.infer<typeof tenantImportSchema>;
+export type TenantManualLogoInput = z.infer<typeof tenantManualLogoSchema>;
 export type OccupancyCreateInput = z.infer<typeof occupancyCreateSchema>;
 export type ContactCreateInput = z.infer<typeof contactCreateSchema>;
+export type ContactUpdateInput = z.infer<typeof contactUpdateSchema>;
 export type PhotoCreateInput = z.infer<typeof photoCreateSchema>;

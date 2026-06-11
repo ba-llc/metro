@@ -1,0 +1,33 @@
+import { BrandfetchResolver } from "./brandfetchResolver";
+import type { LogoHit, LogoQuery, LogoResolver } from "./LogoResolver";
+
+/**
+ * Ordered list of *external* resolvers. The service layer is responsible
+ * for the internal-library lookup first (it requires DB access scoped to
+ * the org). Resolvers here are pure — they only call external APIs.
+ *
+ * Resolvers self-disable when their env var(s) are missing, so the list
+ * itself doesn't need to be conditional.
+ */
+let chain: LogoResolver[] | null = null;
+
+export function getLogoResolverChain(): LogoResolver[] {
+  if (!chain) chain = [new BrandfetchResolver()];
+  return chain;
+}
+
+/** Walk the chain and return the first hit, if any. */
+export async function resolveLogo(query: LogoQuery): Promise<LogoHit | null> {
+  for (const resolver of getLogoResolverChain()) {
+    try {
+      const hit = await resolver.resolve(query);
+      if (hit) return hit;
+    } catch (err) {
+      // Don't let one provider's outage break the chain. Log and continue.
+      console.warn(`[logo-resolver] ${resolver.source} failed:`, err);
+    }
+  }
+  return null;
+}
+
+export * from "./LogoResolver";

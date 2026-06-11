@@ -97,10 +97,10 @@ export function ContactsPanel({
         )}
       </CardContent>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Add Contact">
+      <Modal open={open} onClose={() => setOpen(false)} title="Add Broker Contact">
         {unassigned.length > 0 ? (
           <div className="mb-6 space-y-3 border-b border-slate-100 pb-6">
-            <Field label="Assign existing contact">
+            <Field label="Select from contacts">
               <Select
                 value={selectedContactId}
                 onChange={(e) => setSelectedContactId(e.target.value)}
@@ -134,7 +134,11 @@ export function ContactsPanel({
 
         <form onSubmit={onCreate} className="space-y-4">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Or create a new contact
+            Or add a manual contact
+          </p>
+          <p className="text-sm text-slate-500">
+            Manual contacts are saved to the Contacts directory so they can be reused
+            on future properties.
           </p>
           <Field label="Name" error={errors.name?.message} required>
             <Input {...register("name")} />

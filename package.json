@@ -26,6 +26,7 @@
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "konva": "^9.3.16",
+    "lucide-react": "^1.17.0",
     "next": "^15.3.0",
     "next-auth": "^5.0.0-beta.25",
     "pdfjs-dist": "^4.8.69",

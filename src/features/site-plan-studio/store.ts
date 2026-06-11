@@ -32,6 +32,10 @@ type StudioState = {
   addAnnotation: (a: Omit<AnnotationData, "id" | "layerId" | "zIndex">) => string;
   updateAnnotation: (id: string, patch: Partial<AnnotationData>) => void;
   removeAnnotation: (id: string) => void;
+  importSuggestionLayer: (payload: {
+    layers: AnnotationLayerData[];
+    annotations: AnnotationData[];
+  }) => void;
 
   addLayer: (name: string) => void;
   updateLayer: (id: string, patch: Partial<AnnotationLayerData>) => void;
@@ -96,6 +100,31 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       selectedId: s.selectedId === id ? null : s.selectedId,
       dirty: true,
     })),
+
+  importSuggestionLayer: (payload) =>
+    set((s) => {
+      const keptLayers = s.layers.filter(
+        (layer) => !layer.name.startsWith("AI Suggestions"),
+      );
+      const keptLayerIds = new Set(keptLayers.map((layer) => layer.id));
+      const importedLayers = payload.layers.map((layer, index) => ({
+        ...layer,
+        sortOrder: keptLayers.length + index,
+        visible: true,
+        locked: false,
+      }));
+      return {
+        layers: [...keptLayers, ...importedLayers],
+        annotations: [
+          ...s.annotations.filter((a) => keptLayerIds.has(a.layerId)),
+          ...payload.annotations,
+        ],
+        activeLayerId: importedLayers[0]?.id ?? s.activeLayerId,
+        selectedId: null,
+        activeToolId: "select",
+        dirty: true,
+      };
+    }),
 
   addLayer: (name) =>
     set((s) => {

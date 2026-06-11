@@ -3,8 +3,9 @@ import { ApiError } from "@/server/api/respond";
 import type { OrgContext } from "@/server/auth/context";
 import { logActivity } from "@/server/services/activity.service";
 import { requireProperty } from "@/server/services/property.service";
-import { createAsset, getAsset } from "@/server/services/asset.service";
-import type { PageAnnotations } from "@/types/annotations";
+import { createAsset, getAsset, getAssetContent } from "@/server/services/asset.service";
+import { getSitePlanVisionProvider } from "@/server/providers/site-plan-vision/SitePlanVisionProvider";
+import { pageAnnotationsSchema, type PageAnnotations } from "@/types/annotations";
 
 export async function createSitePlan(
   ctx: OrgContext,
@@ -174,6 +175,66 @@ export async function savePageAnnotations(
   });
 
   return getSitePlanDetail(ctx, page.sitePlanId);
+}
+
+/**
+ * Produces an editable AI suggestion layer for a page without persisting it.
+ * The client imports the returned layer into the working canvas state so the
+ * broker can review and adjust before the normal debounced save runs.
+ */
+export async function analyzeSitePlanPage(ctx: OrgContext, pageId: string) {
+  const page = await db.sitePlanPage.findFirst({
+    where: { id: pageId, sitePlan: { organizationId: ctx.organizationId } },
+    include: {
+      sitePlan: {
+        include: {
+          property: {
+            include: {
+              spaces: true,
+              occupancies: { include: { tenant: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!page) throw new ApiError("NOT_FOUND", "Page not found");
+
+  const { asset, body } = await getAssetContent(ctx, page.imageAssetId);
+  const provider = getSitePlanVisionProvider();
+  const result = await provider.analyze({
+    image: body,
+    imageMime: asset.mime,
+    page: { width: page.width, height: page.height },
+    property: { name: page.sitePlan.property.name },
+    spaces: page.sitePlan.property.spaces.map((space) => ({
+      id: space.id,
+      suiteNumber: space.suiteNumber,
+      squareFootage: space.squareFootage,
+      status: space.status,
+      spaceType: space.spaceType,
+    })),
+    tenants: page.sitePlan.property.occupancies.map((occupancy) => ({
+      id: occupancy.tenant.id,
+      name: occupancy.tenant.name,
+      suiteNumber: occupancy.suiteNumber,
+      logoAssetId: occupancy.tenant.logoAssetId,
+    })),
+  });
+
+  const annotations = pageAnnotationsSchema.parse(result.annotations);
+  await logActivity(ctx, {
+    propertyId: page.sitePlan.propertyId,
+    entityType: "sitePlanPage",
+    entityId: page.id,
+    action: "analyzed",
+    detail: {
+      provider: result.provider,
+      annotationCount: annotations.annotations.length,
+    },
+  });
+
+  return { ...result, annotations };
 }
 
 export async function createSnapshot(

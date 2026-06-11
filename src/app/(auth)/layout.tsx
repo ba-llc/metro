@@ -11,14 +11,14 @@ export default function AuthLayout({
         <div className="mb-8 text-center">
           <Image
             src="/brand/metro-icon.png"
-            alt="Metro Marketing Studio"
+            alt="Metro Studio"
             width={96}
             height={96}
             priority
             className="mx-auto mb-4 rounded-full"
           />
           <h1 className="text-2xl font-bold tracking-tight text-white">
-            Metro Marketing Studio
+            Metro Studio
           </h1>
           <p className="mt-2 text-sm text-brand-200">
             The commercial real estate marketing operating system

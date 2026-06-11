@@ -14,7 +14,7 @@ export default async function DashboardPage() {
     <div>
       <PageHeader
         title={`Welcome back, ${firstName}`}
-        subtitle={`${organization.name} · Metro Marketing Studio`}
+        subtitle={`${organization.name} · Metro Studio`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2">

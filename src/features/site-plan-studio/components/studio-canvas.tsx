@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  ChevronDown,
+  LocateFixed,
+  Minus,
+  Move,
+  Plus,
+} from "lucide-react";
 import { Stage, Layer, Image as KonvaImage, Rect, Line, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { AnnotationData } from "@/types/annotations";
 import { assetUrl } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { getTool } from "../tools";
 import { useStudioStore } from "../store";
 import { AnnotationNode } from "./annotation-node";
 import { useHtmlImage } from "./use-html-image";
 import type { SitePlanPageDetail } from "../types";
+import type { StudioMode } from "./studio-shell";
 
 type Point = { x: number; y: number };
 
@@ -17,14 +26,21 @@ export function StudioCanvas({
   page,
   resolveLabel,
   stageRef,
+  mode,
 }: {
   page: SitePlanPageDetail;
   resolveLabel: (a: AnnotationData) => string;
   stageRef: React.RefObject<Konva.Stage | null>;
+  mode: StudioMode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
-  const [scale, setScale] = useState(0.5);
+  const [zoom, setZoom] = useState(0.5);
+  const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const [containerSize, setContainerSize] = useState({ width: page.width, height: page.height });
+  const [spacePan, setSpacePan] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ pointer: Point; pan: Point } | null>(null);
 
   const layers = useStudioStore((s) => s.layers);
   const annotations = useStudioStore((s) => s.annotations);
@@ -44,19 +60,36 @@ export function StudioCanvas({
   const pageW = page.width;
   const pageH = page.height;
   const tool = getTool(activeToolId);
+  const panMode = activeToolId === "pan" || spacePan;
+  const scale = zoom;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const update = () => {
-      const w = el.clientWidth;
-      if (w > 0) setScale(Math.min(w / pageW, 1.25));
+      setContainerSize({ width: el.clientWidth, height: el.clientHeight });
+      fitToScreen();
     };
-    update();
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [pageW]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageW, pageH]);
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpacePan(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpacePan(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
   // Attach transformer to the selected rect-like node.
   useEffect(() => {
@@ -83,7 +116,61 @@ export function StudioCanvas({
     const stage = stageRef.current;
     const pos = stage?.getPointerPosition();
     if (!pos) return null;
-    return { x: pos.x / scale / pageW, y: pos.y / scale / pageH };
+    return {
+      x: (pos.x - pan.x) / scale / pageW,
+      y: (pos.y - pan.y) / scale / pageH,
+    };
+  }
+
+  function fitToScreen() {
+    const el = containerRef.current;
+    if (!el) return;
+    const nextZoom = Math.min(
+      (el.clientWidth - 96) / pageW,
+      (el.clientHeight - 96) / pageH,
+      1.25,
+    );
+    const safeZoom = Math.max(0.08, nextZoom);
+    setZoom(safeZoom);
+    setPan({
+      x: Math.max(48, (el.clientWidth - pageW * safeZoom) / 2),
+      y: Math.max(48, (el.clientHeight - pageH * safeZoom) / 2),
+    });
+  }
+
+  function setZoomAroundCenter(nextZoom: number) {
+    const el = containerRef.current;
+    if (!el) {
+      setZoom(nextZoom);
+      return;
+    }
+    const center = { x: el.clientWidth / 2, y: el.clientHeight / 2 };
+    zoomAroundPoint(nextZoom, center);
+  }
+
+  function zoomAroundPoint(nextZoom: number, point: Point) {
+    const clamped = Math.min(Math.max(nextZoom, 0.1), 3);
+    setPan((currentPan) => {
+      const pagePoint = {
+        x: (point.x - currentPan.x) / zoom,
+        y: (point.y - currentPan.y) / zoom,
+      };
+      return {
+        x: point.x - pagePoint.x * clamped,
+        y: point.y - pagePoint.y * clamped,
+      };
+    });
+    setZoom(clamped);
+  }
+
+  function onWheel(e: Konva.KonvaEventObject<WheelEvent>) {
+    e.evt.preventDefault();
+    const stage = stageRef.current;
+    const pointer = stage?.getPointerPosition();
+    if (!pointer) return;
+    const direction = e.evt.deltaY > 0 ? -1 : 1;
+    const factor = direction > 0 ? 1.08 : 0.92;
+    zoomAroundPoint(zoom * factor, pointer);
   }
 
   function finishPolygon() {
@@ -109,6 +196,14 @@ export function StudioCanvas({
   }, [polygonPoints, activeToolId]);
 
   function onMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+    const stage = stageRef.current;
+    const pointer = stage?.getPointerPosition();
+    if (panMode && pointer) {
+      setIsPanning(true);
+      panStartRef.current = { pointer, pan };
+      return;
+    }
+
     const pos = pointerPagePos();
     if (!pos) return;
 
@@ -150,6 +245,19 @@ export function StudioCanvas({
   }
 
   function onMouseMove() {
+    if (isPanning) {
+      const stage = stageRef.current;
+      const pointer = stage?.getPointerPosition();
+      const start = panStartRef.current;
+      if (pointer && start) {
+        setPan({
+          x: start.pan.x + pointer.x - start.pointer.x,
+          y: start.pan.y + pointer.y - start.pointer.y,
+        });
+      }
+      return;
+    }
+
     if (draftStart) {
       const pos = pointerPagePos();
       if (pos) setDraftCurrent(pos);
@@ -157,6 +265,12 @@ export function StudioCanvas({
   }
 
   function onMouseUp() {
+    if (isPanning) {
+      setIsPanning(false);
+      panStartRef.current = null;
+      return;
+    }
+
     if (!draftStart || !draftCurrent) return;
     const start = draftStart;
     const end = draftCurrent;
@@ -192,18 +306,24 @@ export function StudioCanvas({
   return (
     <div
       ref={containerRef}
-      className="overflow-auto rounded-lg border border-slate-300 bg-slate-200"
-      style={{ cursor: tool.mode === "select" ? "default" : "crosshair" }}
+      className="relative h-full overflow-hidden bg-slate-200"
+      style={{
+        cursor: panMode ? (isPanning ? "grabbing" : "grab") : tool.mode === "select" ? "default" : "crosshair",
+      }}
     >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.85),transparent_30rem),linear-gradient(135deg,#dfe8f2,#f8fbfd)]" />
       <Stage
         ref={stageRef}
-        width={pageW * scale}
-        height={pageH * scale}
+        width={containerSize.width}
+        height={containerSize.height}
         scaleX={scale}
         scaleY={scale}
+        x={pan.x}
+        y={pan.y}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
+        onWheel={onWheel}
       >
         {/* Locked background: the immutable page raster. */}
         <Layer listening={tool.mode === "select"}>
@@ -289,6 +409,95 @@ export function StudioCanvas({
           />
         </Layer>
       </Stage>
+
+      <div className="absolute left-4 top-4 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-medium text-slate-600 shadow-lg backdrop-blur">
+        {mode === "review" ? "AI Review" : mode === "preview" ? "Preview" : "Edit"} / {Math.round(zoom * 100)}%
+      </div>
+
+      <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-lg backdrop-blur">
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100"
+          onClick={() => setZoomAroundCenter(zoom * 0.85)}
+          aria-label="Zoom out"
+        >
+          <Minus className="size-4" />
+        </button>
+        <div className="h-1.5 w-28 overflow-hidden rounded-full bg-slate-200">
+          <div
+            className="h-full rounded-full bg-brand-900"
+            style={{ width: `${Math.min(100, Math.max(6, (zoom / 3) * 100))}%` }}
+          />
+        </div>
+        <button
+          type="button"
+          className="inline-flex size-8 items-center justify-center rounded-xl text-slate-600 transition hover:bg-slate-100"
+          onClick={() => setZoomAroundCenter(zoom * 1.15)}
+          aria-label="Zoom in"
+        >
+          <Plus className="size-4" />
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1 rounded-xl px-2 text-xs font-semibold text-brand-900 transition hover:bg-slate-100"
+          onClick={fitToScreen}
+        >
+          <LocateFixed className="size-4" />
+          Fit
+        </button>
+      </div>
+
+      <div className="absolute bottom-4 right-4 h-28 w-36 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-lg backdrop-blur">
+        <div className="relative h-full rounded-xl border border-slate-200 bg-slate-50">
+          <div
+            className="absolute rounded border-2 border-brand-500 bg-brand-500/10"
+            style={miniViewportStyle({
+              container: containerRef.current,
+              pageW,
+              pageH,
+              pan,
+              zoom,
+          containerSize,
+            })}
+          />
+        </div>
+      </div>
+
+      <div className="absolute right-4 top-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs text-slate-500 shadow-lg backdrop-blur">
+        <Move className={cn("size-4", panMode ? "text-brand-900" : "text-slate-400")} />
+        <span>Space + drag to pan</span>
+        <ChevronDown className="size-3 text-slate-400" />
+      </div>
     </div>
   );
+}
+
+function miniViewportStyle({
+  container,
+  containerSize,
+  pageW,
+  pageH,
+  pan,
+  zoom,
+}: {
+  container: HTMLDivElement | null;
+  containerSize: { width: number; height: number };
+  pageW: number;
+  pageH: number;
+  pan: Point;
+  zoom: number;
+}): React.CSSProperties {
+  if (!container) return { left: "20%", top: "20%", width: "50%", height: "50%" };
+  const visible = {
+    x: Math.max(0, -pan.x / zoom),
+    y: Math.max(0, -pan.y / zoom),
+    w: Math.min(pageW, containerSize.width / zoom),
+    h: Math.min(pageH, containerSize.height / zoom),
+  };
+  return {
+    left: `${(visible.x / pageW) * 100}%`,
+    top: `${(visible.y / pageH) * 100}%`,
+    width: `${Math.min(100, (visible.w / pageW) * 100)}%`,
+    height: `${Math.min(100, (visible.h / pageH) * 100)}%`,
+  };
 }

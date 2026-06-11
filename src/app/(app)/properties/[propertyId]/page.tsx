@@ -112,7 +112,11 @@ export default function PropertyWorkspacePage({
         </div>
         <div className="space-y-6">
           <PhotosPanel propertyId={propertyId} photos={property.photos} />
-          <TenantsPanel propertyId={propertyId} occupancies={property.occupancies} />
+          <TenantsPanel
+            propertyId={propertyId}
+            occupancies={property.occupancies}
+            geocoded={property.latitude != null}
+          />
           <ContactsPanel propertyId={propertyId} propertyContacts={property.contacts} />
         </div>
       </div>

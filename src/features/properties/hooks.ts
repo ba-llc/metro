@@ -8,12 +8,15 @@ import {
 import { apiFetch } from "@/lib/api";
 import type {
   ContactCreateInput,
+  ContactUpdateInput,
   OccupancyCreateInput,
   PhotoCreateInput,
   PropertyCreateInput,
   PropertyUpdateInput,
   SpaceCreateInput,
   SpaceUpdateInput,
+  TenantDiscoverInput,
+  TenantImportInput,
 } from "./schemas";
 import type {
   PropertyDetail,
@@ -25,6 +28,8 @@ import type {
   PhotoRecord,
   DemographicRecord,
   ActivityRecord,
+  TenantRecord,
+  DiscoveredPlaceRecord,
 } from "./types";
 
 export function usePropertyList(filter: { q?: string; status?: string; propertyType?: string }) {
@@ -160,6 +165,94 @@ export function useDeleteOccupancy(propertyId: string) {
   });
 }
 
+// --- Tenant discovery & logo intelligence ---
+
+export function useDiscoverNearbyTenants(propertyId: string) {
+  return useMutation({
+    mutationFn: (input: TenantDiscoverInput) =>
+      apiFetch<DiscoveredPlaceRecord[]>(
+        `/api/properties/${propertyId}/tenants/discover`,
+        { method: "POST", json: input },
+      ),
+  });
+}
+
+export function useImportDiscoveredTenants(propertyId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: TenantImportInput) =>
+      apiFetch<TenantRecord[]>(
+        `/api/properties/${propertyId}/tenants/import`,
+        { method: "POST", json: input },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tenants"] });
+      void qc.invalidateQueries({ queryKey: ["property", propertyId] });
+    },
+  });
+}
+
+function invalidateTenantQueries(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: ["tenants"] });
+  void qc.invalidateQueries({ queryKey: ["property"] });
+  void qc.invalidateQueries({ queryKey: ["occupancies"] });
+}
+
+export function useResolveTenantLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tenantId: string) =>
+      apiFetch<TenantRecord>(`/api/tenants/${tenantId}/resolve-logo`, {
+        method: "POST",
+      }),
+    onSuccess: () => invalidateTenantQueries(qc),
+  });
+}
+
+export function useApproveTenantLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tenantId: string) =>
+      apiFetch<TenantRecord>(`/api/tenants/${tenantId}/approve-logo`, {
+        method: "POST",
+      }),
+    onSuccess: () => invalidateTenantQueries(qc),
+  });
+}
+
+export function useRejectTenantLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tenantId: string) =>
+      apiFetch<TenantRecord>(`/api/tenants/${tenantId}/reject-logo`, {
+        method: "POST",
+      }),
+    onSuccess: () => invalidateTenantQueries(qc),
+  });
+}
+
+export function useSetManualTenantLogo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tenantId, assetId }: { tenantId: string; assetId: string }) =>
+      apiFetch<TenantRecord>(`/api/tenants/${tenantId}/logo`, {
+        method: "PUT",
+        json: { assetId },
+      }),
+    onSuccess: () => invalidateTenantQueries(qc),
+  });
+}
+
+export function useTenantLibrary(q?: string) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  return useQuery({
+    queryKey: ["tenants", q ?? null],
+    queryFn: () =>
+      apiFetch<TenantRecord[]>(`/api/tenants${params.toString() ? `?${params}` : ""}`),
+  });
+}
+
 // --- Contacts ---
 
 export function useContacts() {
@@ -175,6 +268,34 @@ export function useCreateContact() {
     mutationFn: (input: ContactCreateInput) =>
       apiFetch<ContactRecord>("/api/contacts", { method: "POST", json: input }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["contacts"] }),
+  });
+}
+
+export function useUpdateContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ contactId, input }: { contactId: string; input: ContactUpdateInput }) =>
+      apiFetch<ContactRecord>(`/api/contacts/${contactId}`, {
+        method: "PATCH",
+        json: input,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["contacts"] });
+      void qc.invalidateQueries({ queryKey: ["property"] });
+    },
+  });
+}
+
+export function useDeleteContact() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (contactId: string) =>
+      apiFetch(`/api/contacts/${contactId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["contacts"] });
+      void qc.invalidateQueries({ queryKey: ["property"] });
+      void qc.invalidateQueries({ queryKey: ["properties"] });
+    },
   });
 }
 

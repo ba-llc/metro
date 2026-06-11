@@ -39,9 +39,11 @@ function LogoutIcon() {
 }
 
 export function AppSidebarUser({
+  collapsed,
   name,
   email,
 }: {
+  collapsed: boolean;
   name: string;
   email: string;
 }) {
@@ -59,10 +61,30 @@ export function AppSidebarUser({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [open]);
 
+  useEffect(() => {
+    setOpen(false);
+  }, [collapsed]);
+
   return (
-    <div ref={rootRef} className="relative shrink-0 border-t border-brand-800 p-3">
+    <div
+      ref={rootRef}
+      className={cn("relative shrink-0", collapsed ? "" : "border-t border-brand-800 p-3")}
+    >
+      {collapsed ? <div className="border-t border-brand-800" aria-hidden /> : null}
       {open ? (
-        <div className="absolute inset-x-3 bottom-full mb-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+        <div
+          className={cn(
+            "absolute z-20 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg",
+            collapsed
+              ? "bottom-3 left-full ml-2 w-40"
+              : "inset-x-3 bottom-full mb-2",
+          )}
+        >
+          {!collapsed ? (
+            <p className="truncate border-b border-slate-100 px-3 py-2 text-xs text-slate-500">
+              {displayName}
+            </p>
+          ) : null}
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/sign-in" })}
@@ -73,33 +95,46 @@ export function AppSidebarUser({
           </button>
         </div>
       ) : null}
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-haspopup="menu"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-brand-800"
-      >
-        <UserAvatar />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
-          {displayName}
-        </span>
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      <div className={cn(collapsed && "flex justify-center py-2")}>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label={displayName}
+          title={displayName}
+          onClick={() => setOpen((value) => !value)}
           className={cn(
-            "size-4 shrink-0 text-brand-300 transition-transform",
-            open ? "rotate-180" : "",
+            "rounded-md transition-colors hover:bg-brand-800",
+            collapsed
+              ? "p-1"
+              : "flex w-full items-center gap-3 px-1 py-1 text-left",
           )}
-          aria-hidden
         >
-          <polyline points="18 15 12 9 6 15" />
-        </svg>
-      </button>
+          <UserAvatar />
+          {!collapsed ? (
+            <>
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+                {displayName}
+              </span>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={cn(
+                  "size-4 shrink-0 text-brand-300 transition-transform",
+                  open ? "rotate-180" : "",
+                )}
+                aria-hidden
+              >
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+            </>
+          ) : null}
+        </button>
+      </div>
     </div>
   );
 }

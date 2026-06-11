@@ -10,6 +10,12 @@ import { rasterizePdf } from "./pdf/convert";
 import type { PageAnnotations } from "@/types/annotations";
 import type { SitePlanDetail, SitePlanListItem, SnapshotListItem } from "./types";
 
+export type SitePlanAnalysisResult = {
+  provider: string;
+  notes: string[];
+  annotations: PageAnnotations;
+};
+
 export function useSitePlans(propertyId: string) {
   return useQuery({
     queryKey: ["site-plans", propertyId],
@@ -110,6 +116,16 @@ export function useSaveAnnotations(sitePlanId: string) {
       }),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: ["site-plan", sitePlanId] }),
+  });
+}
+
+export function useAnalyzeSitePlanPage() {
+  return useMutation({
+    mutationFn: (pageId: string) =>
+      apiFetch<SitePlanAnalysisResult>(
+        `/api/site-plan-pages/${pageId}/analyze`,
+        { method: "POST" },
+      ),
   });
 }
 

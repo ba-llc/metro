@@ -15,7 +15,7 @@ export type ToolCreationMode =
   | "point"; // single click placement
 
 export type ToolDefinition = {
-  id: AnnotationType | "select";
+  id: AnnotationType | "select" | "pan";
   label: string;
   shortcut?: string;
   mode: ToolCreationMode;
@@ -26,6 +26,7 @@ export type ToolDefinition = {
 
 export const tools: ToolDefinition[] = [
   { id: "select", label: "Select", shortcut: "V", mode: "select", defaultStyle: {} },
+  { id: "pan", label: "Pan", shortcut: "H", mode: "select", defaultStyle: {} },
   {
     id: "rectangle",
     label: "Rectangle",

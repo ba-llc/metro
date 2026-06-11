@@ -1,8 +1,45 @@
 "use client";
 
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  EyeOff,
+  Lock,
+  Plus,
+  Trash2,
+  Unlock,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useStudioStore } from "../store";
+
+function LayerIconButton({
+  title,
+  className,
+  onClick,
+  children,
+}: {
+  title: string;
+  className?: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      className={cn(
+        "inline-flex size-7 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-slate-700",
+        className,
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
 
 export function LayersPanel() {
   const layers = useStudioStore((s) => s.layers);
@@ -26,7 +63,8 @@ export function LayersPanel() {
           variant="ghost"
           onClick={() => addLayer(`Layer ${layers.length + 1}`)}
         >
-          + Add
+          <Plus className="mr-1 size-3.5" />
+          Add
         </Button>
       </div>
       <ul className="space-y-1">
@@ -34,7 +72,7 @@ export function LayersPanel() {
           <li
             key={layer.id}
             className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-sm",
+              "flex items-center gap-1 rounded-md border px-2 py-1.5 text-sm",
               layer.id === activeLayerId
                 ? "border-brand-300 bg-brand-50"
                 : "border-slate-200 bg-white",
@@ -47,42 +85,32 @@ export function LayersPanel() {
             >
               {layer.name}
             </button>
-            <button
+            <LayerIconButton
               title={layer.visible ? "Hide layer" : "Show layer"}
-              className="px-1 text-xs text-slate-400 hover:text-slate-700"
               onClick={() => updateLayer(layer.id, { visible: !layer.visible })}
             >
-              {layer.visible ? "👁" : "–"}
-            </button>
-            <button
+              {layer.visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+            </LayerIconButton>
+            <LayerIconButton
               title={layer.locked ? "Unlock layer" : "Lock layer"}
-              className="px-1 text-xs text-slate-400 hover:text-slate-700"
               onClick={() => updateLayer(layer.id, { locked: !layer.locked })}
             >
-              {layer.locked ? "🔒" : "🔓"}
-            </button>
-            <button
-              title="Move up"
-              className="px-1 text-xs text-slate-400 hover:text-slate-700"
-              onClick={() => moveLayer(layer.id, 1)}
-            >
-              ↑
-            </button>
-            <button
-              title="Move down"
-              className="px-1 text-xs text-slate-400 hover:text-slate-700"
-              onClick={() => moveLayer(layer.id, -1)}
-            >
-              ↓
-            </button>
+              {layer.locked ? <Lock className="size-4" /> : <Unlock className="size-4" />}
+            </LayerIconButton>
+            <LayerIconButton title="Move up" onClick={() => moveLayer(layer.id, 1)}>
+              <ArrowUp className="size-4" />
+            </LayerIconButton>
+            <LayerIconButton title="Move down" onClick={() => moveLayer(layer.id, -1)}>
+              <ArrowDown className="size-4" />
+            </LayerIconButton>
             {layers.length > 1 ? (
-              <button
+              <LayerIconButton
                 title="Delete layer"
-                className="px-1 text-xs text-red-400 hover:text-red-600"
+                className="text-red-400 hover:bg-red-50 hover:text-red-600"
                 onClick={() => removeLayer(layer.id)}
               >
-                ✕
-              </button>
+                <Trash2 className="size-4" />
+              </LayerIconButton>
             ) : null}
           </li>
         ))}

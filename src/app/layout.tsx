@@ -3,7 +3,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Metro Marketing Studio",
+  title: "Metro Studio",
   description:
     "The commercial real estate marketing operating system — one property record, every marketing asset.",
   icons: {

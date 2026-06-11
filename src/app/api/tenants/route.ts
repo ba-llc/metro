@@ -3,10 +3,11 @@ import { requireOrg, requireWriter } from "@/server/auth/context";
 import { createTenant, listTenants } from "@/server/services/tenant.service";
 import { tenantCreateSchema } from "@/features/properties/schemas";
 
-export async function GET() {
+export async function GET(req: Request) {
   return handle(async () => {
     const ctx = await requireOrg();
-    return listTenants(ctx);
+    const q = new URL(req.url).searchParams.get("q") ?? undefined;
+    return listTenants(ctx, { q });
   });
 }
 

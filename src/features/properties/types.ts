@@ -32,12 +32,37 @@ export type SpaceRecord = {
   notes: string | null;
 };
 
+export type TenantLogoStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+export type TenantLogoSource = "LIBRARY" | "BRANDFETCH" | "MANUAL";
+
 export type TenantRecord = {
   id: string;
   name: string;
   category: string | null;
   website: string | null;
   logoAssetId: string | null;
+  logoStatus: TenantLogoStatus;
+  logoSource: TenantLogoSource | null;
+  googlePlaceId: string | null;
+  formattedAddress: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  phoneNumber: string | null;
+};
+
+export type DiscoveredPlaceRecord = {
+  placeId: string;
+  name: string;
+  formattedAddress?: string;
+  location?: { lat: number; lng: number };
+  types: string[];
+  primaryType?: string;
+  website?: string;
+  phoneNumber?: string;
+  rating?: number;
+  userRatingCount?: number;
+  existingTenantId: string | null;
+  hasLogo: boolean;
 };
 
 export type OccupancyRecord = {
@@ -55,6 +80,7 @@ export type ContactRecord = {
   email: string | null;
   phone: string | null;
   license: string | null;
+  _count?: { properties: number };
 };
 
 export type PropertyContactRecord = {

@@ -169,21 +169,46 @@ model Space {
   @@index([organizationId, propertyId])
 }
 
+enum TenantLogoStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TenantLogoSource {
+  LIBRARY
+  BRANDFETCH
+  MANUAL
+}
+
 model Tenant {
-  id             String   @id @default(cuid())
-  organizationId String
-  name           String
-  category       String?
-  website        String?
-  logoAssetId    String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String            @id @default(cuid())
+  organizationId   String
+  name             String
+  category         String?
+  website          String?
+  logoAssetId      String?
+  logoStatus       TenantLogoStatus  @default(NONE)
+  logoSource       TenantLogoSource?
+  // Google Places (New) metadata — Places is the system of record for
+  // location/discovery only, never for the logo image itself.
+  googlePlaceId    String?           @unique
+  formattedAddress String?
+  latitude         Float?
+  longitude        Float?
+  phoneNumber      String?
+  placeTypes       Json              @default("[]")
+  discoveredAt     DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   logoAsset    Asset?            @relation(fields: [logoAssetId], references: [id])
   occupancies  TenantOccupancy[]
 
   @@index([organizationId, name])
+  @@index([organizationId, logoStatus])
 }
 
 model TenantOccupancy {
