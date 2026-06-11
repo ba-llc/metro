@@ -28,6 +28,7 @@ export type DocumentShareMeta = {
   isLatest: boolean;
   isLiveChannel: boolean;
   isPublishedWebsite: boolean;
+  sitePlanAssetId: string | null;
 };
 
 export type ChannelShareGroup = {
@@ -48,6 +49,8 @@ export type DocumentLibraryResponse = {
     publishedWebsiteDocumentId: string | null;
     publishedAt: string | null;
     unpublishedAt: string | null;
+    sitePlanExportAssetId: string | null;
+    sitePlanExportedAt: string | null;
   };
   documents: DocumentShareMeta[];
   channels: ChannelShareGroup[];

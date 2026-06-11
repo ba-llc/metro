@@ -65,6 +65,7 @@ export async function getSitePlanDetail(ctx: OrgContext, sitePlanId: string) {
             orderBy: { sortOrder: "asc" },
             include: { annotations: { orderBy: { zIndex: "asc" } } },
           },
+          sourceMapAsset: { select: { id: true, kind: true } },
         },
       },
       property: { select: { id: true, name: true } },
@@ -87,10 +88,27 @@ export async function listSitePlans(ctx: OrgContext, propertyId: string) {
 export async function registerPage(
   ctx: OrgContext,
   sitePlanId: string,
-  input: { pageNumber: number; assetId: string; width: number; height: number },
+  input: {
+    pageNumber: number;
+    assetId: string;
+    width: number;
+    height: number;
+    sourceMapAssetId?: string | null;
+  },
 ) {
   const plan = await requireSitePlan(ctx, sitePlanId);
   await getAsset(ctx, input.assetId);
+  if (input.sourceMapAssetId) {
+    const map = await db.mapAsset.findFirst({
+      where: {
+        id: input.sourceMapAssetId,
+        propertyId: plan.propertyId,
+        property: { organizationId: ctx.organizationId },
+      },
+      select: { id: true },
+    });
+    if (!map) throw new ApiError("NOT_FOUND", "Map not found");
+  }
 
   const page = await db.sitePlanPage.upsert({
     where: {
@@ -100,12 +118,14 @@ export async function registerPage(
       sitePlanId,
       pageNumber: input.pageNumber,
       imageAssetId: input.assetId,
+      sourceMapAssetId: input.sourceMapAssetId ?? null,
       width: input.width,
       height: input.height,
       layers: { create: { name: "Annotations", sortOrder: 0 } },
     },
     update: {
       imageAssetId: input.assetId,
+      sourceMapAssetId: input.sourceMapAssetId ?? null,
       width: input.width,
       height: input.height,
     },

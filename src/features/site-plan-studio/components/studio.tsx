@@ -1,14 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type Konva from "konva";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { StudioSkeleton } from "@/components/ui/skeleton";
-import { assetUrl, uploadAsset } from "@/lib/api";
-import { formatDate, formatRate } from "@/lib/utils";
+import { apiFetch, assetUrl, uploadAsset } from "@/lib/api";
+import { formatDate, formatRate, labelize } from "@/lib/utils";
 import type { AnnotationData } from "@/types/annotations";
 import { usePropertyDetail } from "@/features/properties/hooks";
 import type { OccupancyRecord, SpaceRecord } from "@/features/properties/types";
@@ -82,6 +83,7 @@ export function Studio({
   } | null>(null);
 
   const { data: plan, isLoading } = useSitePlanDetail(sitePlanId);
+  const qc = useQueryClient();
   const { data: property } = usePropertyDetail(propertyId);
   const { data: maps = [] } = useMaps(propertyId);
   const saveAnnotations = useSaveAnnotations(sitePlanId);
@@ -121,6 +123,24 @@ export function Studio({
       )
       .map((logo) => [logo.assetId, logo.tenantName]),
   );
+  const sourceMapForPage = page
+    ? page.sourceMapAssetId
+      ? (maps.find((map) => map.id === page.sourceMapAssetId) ??
+        (page.sourceMapAsset
+          ? { ...page.sourceMapAsset, imageAssetId: null }
+          : null))
+      : (maps.find((map) => map.imageAssetId === page.imageAssetId) ?? null)
+    : null;
+  const publicExportReady = sourceMapForPage
+    ? Boolean(sourceMapForPage.imageAssetId)
+    : Boolean(plan?.latestExportAssetId);
+  const publicExportActionLabel = sourceMapForPage
+    ? publicExportReady
+      ? `Update ${labelize(sourceMapForPage.kind)}`
+      : `Use as ${labelize(sourceMapForPage.kind)}`
+    : publicExportReady
+      ? "Update Site Plan"
+      : "Use as Site Plan";
 
   // Load page state into the store when the page changes (not on every save refetch).
   const loadedPageRef = useRef<string | null>(null);
@@ -190,7 +210,16 @@ export function Studio({
     const stage = stageRef.current;
     if (!stage || !page) return;
     setExporting(true);
+    setAnalysisMessage(null);
     try {
+      if (dirty && reviewSuggestionCount === 0 && mode !== "review") {
+        const { layers, annotations } = useStudioStore.getState();
+        await saveAnnotations.mutateAsync({
+          pageId: page.id,
+          payload: { layers, annotations },
+        });
+        markSaved();
+      }
       const { select } = useStudioStore.getState();
       select(null); // hide the transformer before flattening
       await new Promise((r) => setTimeout(r, 50));
@@ -204,7 +233,19 @@ export function Studio({
         width: page.width * 2,
         height: page.height * 2,
       });
-      await registerExport.mutateAsync(asset.id);
+      if (sourceMapForPage) {
+        await apiFetch(`/api/maps/${sourceMapForPage.id}/export`, {
+          method: "POST",
+          json: { assetId: asset.id },
+        });
+        await qc.invalidateQueries({ queryKey: ["maps", propertyId] });
+      } else {
+        await registerExport.mutateAsync(asset.id);
+      }
+      setAnalysisTone("info");
+      setAnalysisMessage(
+        `${sourceMapForPage ? labelize(sourceMapForPage.kind) : "Site plan"} updated for the public site. Regenerate the property website draft from Marketing before publishing.`,
+      );
     } finally {
       setExporting(false);
     }
@@ -333,6 +374,7 @@ export function Studio({
         assetId: map.imageAssetId,
         width: dimensions.width,
         height: dimensions.height,
+        sourceMapAssetId: map.id,
       });
       setPendingImportedAssetId(map.imageAssetId);
     } finally {
@@ -363,6 +405,8 @@ export function Studio({
       onAnalyze={analyzeCurrentPage}
       onVersions={() => setSnapshotsOpen(true)}
       onExport={() => void exportFlattened()}
+      publicExportReady={publicExportReady}
+      publicExportLabel={publicExportActionLabel}
       toolRail={
         <ToolRail
           activeToolId={activeToolId}

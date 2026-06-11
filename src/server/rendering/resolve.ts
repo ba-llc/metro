@@ -128,6 +128,7 @@ export async function resolveRenderContext(
       aerial: latestMapByKind("SATELLITE_AERIAL"),
       tradeArea: latestMapByKind("TRADE_AREA"),
       radius: latestMapByKind("RADIUS"),
+      retail: latestMapByKind("RETAIL"),
       sitePlan: property.sitePlans[0]?.latestExportAssetId ?? null,
     },
     generatedContent: {},

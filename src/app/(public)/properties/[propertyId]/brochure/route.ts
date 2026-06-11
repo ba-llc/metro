@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { ApiError } from "@/server/api/respond";
 import {
-  getPublicDocumentContent,
-  getPublishedWebsiteDocument,
+  renderPublishedWebsiteHtml,
   resolvePublicPropertyBySlug,
 } from "@/server/services/publicShare.service";
 
@@ -13,8 +12,8 @@ export async function GET(_req: Request, { params }: Params) {
   try {
     const { propertyId: propertySlug } = await params;
     const ref = await resolvePublicPropertyBySlug(propertySlug);
-    const doc = await getPublishedWebsiteDocument(ref.propertyId);
-    if (!doc) {
+    const html = await renderPublishedWebsiteHtml(ref.propertyId);
+    if (!html) {
       return NextResponse.json(
         {
           error: {
@@ -26,10 +25,9 @@ export async function GET(_req: Request, { params }: Params) {
       );
     }
 
-    const { body, mime } = await getPublicDocumentContent(doc.id);
-    return new NextResponse(new Uint8Array(body), {
+    return new NextResponse(html, {
       headers: {
-        "Content-Type": mime,
+        "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "public, max-age=60, stale-while-revalidate=300",
       },
     });

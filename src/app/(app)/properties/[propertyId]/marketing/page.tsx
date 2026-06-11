@@ -145,201 +145,287 @@ function ShareLinkRow({
   );
 }
 
-function ChannelSharePanel({
+function CopyButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    await navigator.clipboard.writeText(`${window.location.origin}${url}`);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Button size="sm" variant="secondary" onClick={() => void copy()}>
+      {copied ? "Copied" : "Copy"}
+    </Button>
+  );
+}
+
+function PublicSitePanel({
   group,
   publication,
-  onDelete,
-  onRetry,
   onGenerate,
   onPublishWebsite,
   onUnpublishWebsite,
-  deletePending,
-  retryPending,
   publishPending,
   unpublishPending,
 }: {
-  group: ChannelShareGroup;
+  group: ChannelShareGroup | null;
   publication: DocumentLibraryResponse["publication"];
-  onDelete: (id: string) => void;
-  onRetry: (id: string) => void;
   onGenerate: (channel: string) => void;
   onPublishWebsite: (id: string) => void;
   onUnpublishWebsite: () => void;
-  deletePending: boolean;
-  retryPending: boolean;
   publishPending: boolean;
   unpublishPending: boolean;
 }) {
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const latestReady = group.versions.find(
+  const latestReady = group?.versions.find(
+    (doc) => doc.status === "READY" && doc.outputAssetId,
+  ) ?? null;
+  const latestAttempt = group?.versions[0] ?? null;
+  const publishedId = publication.publishedWebsiteDocumentId;
+  const isPublished = publication.status === "PUBLISHED" && Boolean(publishedId);
+  const newerDraftReady =
+    isPublished && latestReady ? latestReady.id !== publishedId : false;
+  const latestSitePlanExportId = publication.sitePlanExportAssetId;
+  const latestDraftUsesCurrentSitePlan =
+    !latestSitePlanExportId ||
+    Boolean(latestReady && latestReady.sitePlanAssetId === latestSitePlanExportId);
+  const sitePlanExportChanged = Boolean(latestReady && !latestDraftUsesCurrentSitePlan);
+
+  let statusLabel = "Not generated";
+  let statusTone: ChannelTone = "slate";
+  if (latestAttempt?.status === "QUEUED" || latestAttempt?.status === "RENDERING") {
+    statusLabel = "Rendering draft";
+    statusTone = "blue";
+  } else if (latestAttempt?.status === "FAILED") {
+    statusLabel = "Draft failed";
+    statusTone = "red";
+  } else if (sitePlanExportChanged) {
+    statusLabel = "Site plan changed";
+    statusTone = "amber";
+  } else if (newerDraftReady) {
+    statusLabel = "New draft available";
+    statusTone = "amber";
+  } else if (isPublished) {
+    statusLabel = "Published";
+    statusTone = "green";
+  } else if (latestReady) {
+    statusLabel = "Draft ready";
+    statusTone = "blue";
+  } else if (publication.status === "UNPUBLISHED") {
+    statusLabel = "Unpublished";
+    statusTone = "slate";
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-950">
+              Public Property Site
+            </h2>
+            <Badge tone={statusTone}>{statusLabel}</Badge>
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            Generate a website draft, preview it, then publish when it is client-ready.
+          </p>
+          {sitePlanExportChanged ? (
+            <p className="mt-3 max-w-2xl rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+              The Studio site plan export changed after this website draft was
+              generated. Regenerate the site draft before publishing.
+            </p>
+          ) : null}
+          <p className="mt-4 truncate font-mono text-sm text-slate-800">
+            {publication.publicUrl}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button size="sm" variant="secondary" onClick={() => onGenerate("WEBSITE")}>
+            {latestReady ? "Regenerate Site" : "Generate Site"}
+          </Button>
+          {latestReady ? (
+            <a href={latestReady.shareUrl ?? "#"} target="_blank" rel="noreferrer">
+              <Button size="sm" variant="secondary">
+                Preview Draft
+              </Button>
+            </a>
+          ) : null}
+          {latestReady ? (
+            <Button
+              size="sm"
+              loading={publishPending}
+              disabled={sitePlanExportChanged}
+              onClick={() => onPublishWebsite(latestReady.id)}
+            >
+              {isPublished && publishedId === latestReady.id ? "Republish" : "Publish"}
+            </Button>
+          ) : null}
+          {isPublished ? (
+            <>
+              <CopyButton url={publication.publicUrl} />
+              <a href={publication.publicUrl} target="_blank" rel="noreferrer">
+                <Button size="sm" variant="secondary">
+                  Open Public
+                </Button>
+              </a>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Latest draft
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-900">
+            {latestReady
+              ? `v${latestReady.versionNumber} · ${formatDate(latestReady.createdAt)}`
+              : latestAttempt
+                ? labelize(latestAttempt.status)
+                : "None yet"}
+          </p>
+          {latestAttempt?.status === "FAILED" && latestAttempt.error ? (
+            <p className="mt-1 text-xs text-red-600">{latestAttempt.error}</p>
+          ) : null}
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Studio site plan
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-900">
+            {publication.sitePlanExportedAt
+              ? `Exported ${formatDate(publication.sitePlanExportedAt)}`
+              : "No public export"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Published version
+          </p>
+          <p className="mt-1 text-sm font-medium text-slate-900">
+            {isPublished && publication.publishedAt
+              ? formatDate(publication.publishedAt)
+              : "Not published"}
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Public access
+          </p>
+          <div className="mt-1 flex items-center justify-between gap-3">
+            <p className="text-sm font-medium text-slate-900">
+              {isPublished ? "Live" : "Unavailable"}
+            </p>
+            {isPublished ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-600"
+                loading={unpublishPending}
+                onClick={onUnpublishWebsite}
+              >
+                Unpublish
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MarketingMaterialCard({
+  group,
+  onDelete,
+  onRetry,
+  onGenerate,
+  deletePending,
+  retryPending,
+}: {
+  group: ChannelShareGroup;
+  onDelete: (id: string) => void;
+  onRetry: (id: string) => void;
+  onGenerate: (channel: string) => void;
+  deletePending: boolean;
+  retryPending: boolean;
+}) {
+  const readyVersions = group.versions.filter(
     (doc) => doc.status === "READY" && doc.outputAssetId,
   );
+  const latestReady = readyVersions[0] ?? null;
   const latestAttempt = group.versions[0] ?? null;
-  const showHistory =
-    !group.isLive &&
-    group.versions.some((doc) => doc.status === "READY" && doc.outputAssetId);
+  const [historyOpen, setHistoryOpen] = useState(readyVersions.length > 1);
+  const showHistory = readyVersions.length > 0;
 
   function confirmDelete(documentId: string) {
-    if (
-      confirm(
-        "Delete this document attempt? You can generate a new one afterward.",
-      )
-    ) {
+    if (confirm("Delete this document attempt? You can generate a new one afterward.")) {
       onDelete(documentId);
     }
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-slate-900">
-              {group.label}
-            </h3>
+            <h3 className="text-base font-semibold text-slate-950">{group.label}</h3>
             <Badge tone={channelTones[group.channel] ?? "slate"}>
               {labelize(group.channel)}
             </Badge>
-            {group.isLive ? (
-              <Badge tone={publication.status === "PUBLISHED" ? "green" : "slate"}>
-                {publication.status === "PUBLISHED" ? "Published site" : "Website draft"}
-              </Badge>
-            ) : (
-              <Badge tone="slate">PDF with version history</Badge>
-            )}
           </div>
-          {latestReady ? (
-            <p className="mt-1 text-sm text-slate-600">
-              {group.isLive ? "Latest draft" : "Latest"}: v{latestReady.versionNumber} ·{" "}
-              {formatDate(latestReady.createdAt)}
-            </p>
-          ) : (
-            <p className="mt-1 text-sm text-slate-500">Not generated yet</p>
-          )}
-        </div>
-        {latestAttempt?.status ? (
-          <StatusBadge status={latestAttempt.status} />
-        ) : null}
-      </div>
-
-      {!latestReady && latestAttempt ? (
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <p className="text-sm text-slate-700">
-            {latestAttempt.status === "FAILED"
-              ? "The last generation attempt failed."
-              : latestAttempt.status === "RENDERING"
-                ? "Rendering in progress…"
-                : "Queued for rendering…"}
+          <p className="mt-1 text-sm text-slate-500">
+            {latestReady
+              ? `Ready · v${latestReady.versionNumber} · ${formatDate(latestReady.createdAt)}`
+              : latestAttempt
+                ? labelize(latestAttempt.status)
+                : "Not generated yet"}
           </p>
-          {latestAttempt.status === "FAILED" && latestAttempt.error ? (
-            <p className="mt-2 text-sm text-red-600">{latestAttempt.error}</p>
+          {latestAttempt?.status === "FAILED" && latestAttempt.error ? (
+            <p className="mt-1 text-sm text-red-600">{latestAttempt.error}</p>
           ) : null}
-          <div className="mt-4 flex flex-wrap gap-2">
-            {latestAttempt.status === "FAILED" ? (
-              <Button
-                size="sm"
-                loading={retryPending}
-                onClick={() => onRetry(latestAttempt.id)}
-              >
-                Retry
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {latestReady?.shareUrl ? <CopyButton url={latestReady.shareUrl} /> : null}
+          {latestReady?.shareUrl ? (
+            <a href={latestReady.shareUrl} target="_blank" rel="noreferrer">
+              <Button size="sm" variant="secondary">
+                Open
               </Button>
-            ) : null}
+            </a>
+          ) : null}
+          {latestReady?.downloadUrl ? (
+            <a href={latestReady.downloadUrl}>
+              <Button size="sm" variant="secondary">
+                Download
+              </Button>
+            </a>
+          ) : null}
+          {latestAttempt?.status === "FAILED" ? (
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => onGenerate(group.channel)}
+              loading={retryPending}
+              onClick={() => onRetry(latestAttempt.id)}
             >
-              {latestAttempt.status === "FAILED" ? "Generate new" : "Generate"}
+              Retry
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-red-600"
-              loading={deletePending}
-              onClick={() => confirmDelete(latestAttempt.id)}
-            >
-              Delete
-            </Button>
-          </div>
+          ) : null}
+          <Button size="sm" onClick={() => onGenerate(group.channel)}>
+            Generate
+          </Button>
         </div>
-      ) : null}
-
-      {group.isLive ? (
-        <div className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                Public site
-              </p>
-              <p className="mt-1 font-mono text-sm text-slate-800">
-                {publication.publicUrl}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                {publication.status === "PUBLISHED" && publication.publishedAt
-                  ? `Published ${formatDate(publication.publishedAt)}`
-                  : "Generate a website draft, then publish it when it is ready."}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
-              {latestReady?.shareUrl ? (
-                <a href={latestReady.shareUrl} target="_blank" rel="noreferrer">
-                  <Button size="sm" variant="secondary">
-                    Preview draft
-                  </Button>
-                </a>
-              ) : null}
-              {latestReady ? (
-                <Button
-                  size="sm"
-                  loading={publishPending}
-                  onClick={() => onPublishWebsite(latestReady.id)}
-                >
-                  {publication.status === "PUBLISHED" &&
-                  publication.publishedWebsiteDocumentId === latestReady.id
-                    ? "Republish"
-                    : "Publish"}
-                </Button>
-              ) : null}
-              {publication.status === "PUBLISHED" ? (
-                <>
-                  <a href={publication.publicUrl} target="_blank" rel="noreferrer">
-                    <Button size="sm" variant="secondary">
-                      Open public
-                    </Button>
-                  </a>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-red-600"
-                    loading={unpublishPending}
-                    onClick={onUnpublishWebsite}
-                  >
-                    Unpublish
-                  </Button>
-                </>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : group.canonicalShareUrl ? (
-        <div className="mt-4 space-y-3">
-          <ShareLinkRow
-            label="Latest share link"
-            url={group.canonicalShareUrl}
-            hint="Opens the latest PDF. Previous versions remain available in history below."
-          />
-        </div>
-      ) : null}
+      </div>
 
       {showHistory ? (
         <div className="mt-4">
           <button
             type="button"
-            onClick={() => setHistoryOpen((v) => !v)}
+            onClick={() => setHistoryOpen((value) => !value)}
             className="text-sm font-medium text-brand-800 hover:underline"
           >
-            {historyOpen ? "Hide" : "Show"} PDF version history (
-            {group.versions.length})
+            {historyOpen ? "Hide" : "Show"} version history ({group.versions.length})
           </button>
           {historyOpen ? (
             <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
@@ -370,11 +456,10 @@ function ChannelSharePanel({
         </div>
       ) : null}
 
-      {!group.isLive && !group.canonicalShareUrl && !latestAttempt ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      {!latestAttempt ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
           <p className="text-sm text-slate-500">
-            Generate a {group.label.toLowerCase()} to get a shareable link and
-            PDF downloads.
+            Generate this format to create a shareable PDF.
           </p>
           <Button size="sm" onClick={() => onGenerate(group.channel)}>
             Generate
@@ -641,6 +726,8 @@ export default function MarketingPage({
   const channelGroups =
     library?.channels ??
     ([] as ChannelShareGroup[]);
+  const websiteGroup = channelGroups.find((group) => group.channel === "WEBSITE") ?? null;
+  const materialGroups = channelGroups.filter((group) => group.channel !== "WEBSITE");
   const availableTemplates = templates?.filter(
     (template) => template.channel !== "EMAIL",
   );
@@ -666,22 +753,6 @@ export default function MarketingPage({
         }
       />
 
-      {library?.publication ? (
-        <ShareLinkRow
-          label={
-            library.publication.status === "PUBLISHED"
-              ? "Published property site"
-              : "Property site URL"
-          }
-          url={library.publication.publicUrl}
-          hint={
-            library.publication.status === "PUBLISHED"
-              ? "This public URL serves the currently published website version."
-              : "This URL stays unavailable until you publish a website draft."
-          }
-        />
-      ) : null}
-
       {inProgress ? (
         <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
           Rendering in progress… share links will appear when documents are ready.
@@ -690,45 +761,67 @@ export default function MarketingPage({
 
       {isLoading ? (
         <MarketingDocumentsSkeleton />
-      ) : !library || library.documents.length === 0 ? (
-        <EmptyState
-          title="No documents yet"
-          description="Generate a public property site draft or a marketing PDF from the property record."
-          action={
-            <Button onClick={() => setGenerateOpen(true)}>
-              Generate
-            </Button>
-          }
-        />
+      ) : !library ? (
+        <EmptyState title="No marketing workspace" description="Property data is unavailable." />
       ) : (
-        <div className="mt-6 space-y-4">
-          {channelGroups.length > 0 ? (
-            channelGroups.map((group) => (
-                <ChannelSharePanel
+        <div className="space-y-8">
+          <PublicSitePanel
+            group={websiteGroup}
+            publication={library.publication}
+            onGenerate={openGenerateForChannel}
+            onPublishWebsite={(id) => publishWebsite.mutate(id)}
+            onUnpublishWebsite={() => {
+              if (confirm("Unpublish this public property website?")) {
+                unpublishWebsite.mutate();
+              }
+            }}
+            publishPending={publishWebsite.isPending}
+            unpublishPending={unpublishWebsite.isPending}
+          />
+
+          <section>
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  Marketing Materials
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Versioned PDFs for broker follow-up, tours, and outbound sharing.
+                </p>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => setGenerateOpen(true)}>
+                Generate Material
+              </Button>
+            </div>
+            {materialGroups.length > 0 ? (
+              <div className="space-y-3">
+                {materialGroups.map((group) => (
+                  <MarketingMaterialCard
                   key={group.channel}
                   group={group}
-                  publication={library.publication}
                   onDelete={(id) => deleteDocument.mutate(id)}
                   onRetry={(id) => retryDocument.mutate(id)}
                   onGenerate={openGenerateForChannel}
-                  onPublishWebsite={(id) => publishWebsite.mutate(id)}
-                  onUnpublishWebsite={() => {
-                    if (confirm("Unpublish this public property website?")) {
-                      unpublishWebsite.mutate();
-                    }
-                  }}
                   deletePending={deleteDocument.isPending}
                   retryPending={retryDocument.isPending}
-                  publishPending={publishWebsite.isPending}
-                  unpublishPending={unpublishWebsite.isPending}
                 />
-            ))
-          ) : (
-            <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600">
-              Documents are rendering. Refresh shortly for share links.
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  No marketing PDFs yet
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Generate a premium package or flyer when you need a shareable PDF.
+                </p>
+                <Button className="mt-4" size="sm" onClick={() => setGenerateOpen(true)}>
+                  Generate
+                </Button>
+              </div>
+            )}
+          </section>
             </div>
-          )}
-        </div>
       )}
 
       <Modal

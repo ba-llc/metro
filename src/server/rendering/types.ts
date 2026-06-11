@@ -51,6 +51,7 @@ export type RenderContext = {
     aerial: string | null;
     tradeArea: string | null;
     radius: string | null;
+    retail: string | null;
     sitePlan: string | null;
   };
   /** Reserved for the future AI layer (descriptions, summaries, captions). */

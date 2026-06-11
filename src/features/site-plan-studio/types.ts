@@ -16,6 +16,8 @@ export type SitePlanPageDetail = {
   id: string;
   pageNumber: number;
   imageAssetId: string;
+  sourceMapAssetId: string | null;
+  sourceMapAsset?: { id: string; kind: string } | null;
   width: number;
   height: number;
   layers: (AnnotationLayerData & { annotations: AnnotationData[] })[];

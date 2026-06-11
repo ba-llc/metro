@@ -9,6 +9,7 @@ import { resolveRenderContext } from "@/server/rendering/resolve";
 import { renderDocumentHtml, renderEmailHtml } from "@/server/rendering/renderHtml";
 import { renderWebsiteHtml } from "@/server/rendering/renderWebsite";
 import type { RenderContext, RenderImages } from "@/server/rendering/types";
+import { loadRenderImages } from "@/server/rendering/loadImages";
 import {
   metroCommercialTheme,
   type TemplatePage,
@@ -27,7 +28,6 @@ import {
   versionSharePath,
 } from "@/features/marketing/publicUrls";
 import { getPdfRenderer } from "@/server/providers/pdf/chromiumPdfRenderer";
-import { getStorage } from "@/server/providers/storage";
 import { enqueueJob } from "@/server/jobs/runner";
 
 export type DocumentShareMeta = {
@@ -44,6 +44,7 @@ export type DocumentShareMeta = {
   isLatest: boolean;
   isLiveChannel: boolean;
   isPublishedWebsite: boolean;
+  sitePlanAssetId: string | null;
 };
 
 export type PropertyPublicationMeta = {
@@ -52,6 +53,8 @@ export type PropertyPublicationMeta = {
   publishedWebsiteDocumentId: string | null;
   publishedAt: Date | null;
   unpublishedAt: Date | null;
+  sitePlanExportAssetId: string | null;
+  sitePlanExportedAt: Date | null;
 };
 
 export type DocumentLibraryResponse = {
@@ -87,6 +90,14 @@ const legacyOrangeAccents = new Set([
   "#ff5a1f",
 ]);
 
+function getSnapshotSitePlanAssetId(snapshot: unknown): string | null {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const imageAssets = (snapshot as { imageAssets?: unknown }).imageAssets;
+  if (!imageAssets || typeof imageAssets !== "object") return null;
+  const sitePlan = (imageAssets as { sitePlan?: unknown }).sitePlan;
+  return typeof sitePlan === "string" ? sitePlan : null;
+}
+
 function renderTheme(theme: Partial<TemplateTheme>): TemplateTheme {
   const merged = {
     ...metroCommercialTheme,
@@ -118,6 +129,7 @@ function enrichDocument(
     outputAssetId: string | null;
     error: string | null;
     createdAt: Date;
+    dataSnapshot?: unknown;
     template: { name: string };
   },
   ref: PublicPropertyRef,
@@ -148,6 +160,8 @@ function enrichDocument(
     isLatest,
     isLiveChannel: live,
     isPublishedWebsite: doc.channel === "WEBSITE" && doc.id === publishedWebsiteDocumentId,
+    sitePlanAssetId:
+      doc.channel === "WEBSITE" ? getSnapshotSitePlanAssetId(doc.dataSnapshot) : null,
   };
 }
 
@@ -164,6 +178,14 @@ export async function listDocuments(
     include: {
       organization: { select: { slug: true, name: true } },
       publication: true,
+      sitePlans: {
+        where: { latestExportAssetId: { not: null } },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        include: {
+          latestExportAsset: { select: { id: true, createdAt: true } },
+        },
+      },
     },
   });
   if (!property) throw new ApiError("NOT_FOUND", "Property not found");
@@ -257,6 +279,8 @@ export async function listDocuments(
           : null,
       publishedAt: property.publication?.publishedAt ?? null,
       unpublishedAt: property.publication?.unpublishedAt ?? null,
+      sitePlanExportAssetId: property.sitePlans[0]?.latestExportAssetId ?? null,
+      sitePlanExportedAt: property.sitePlans[0]?.latestExportAsset?.createdAt ?? null,
     },
     documents: enriched,
     channels,
@@ -461,27 +485,7 @@ async function loadImages(
   ctx: OrgContext,
   context: RenderContext,
 ): Promise<RenderImages> {
-  const assetIds = new Set<string>();
-  for (const id of Object.values(context.imageAssets)) {
-    if (id) assetIds.add(id);
-  }
-  for (const t of context.tenants) {
-    if (t.logoAssetId) assetIds.add(t.logoAssetId);
-  }
-
-  const assets = await db.asset.findMany({
-    where: { id: { in: [...assetIds] }, organizationId: ctx.organizationId },
-  });
-
-  const storage = getStorage();
-  const images: RenderImages = {};
-  await Promise.all(
-    assets.map(async (asset) => {
-      const body = await storage.get(asset.storageKey);
-      images[asset.id] = `data:${asset.mime};base64,${body.toString("base64")}`;
-    }),
-  );
-  return images;
+  return loadRenderImages(ctx, context);
 }
 
 /** Executed by the job runner: resolves data, renders, stores the output. */

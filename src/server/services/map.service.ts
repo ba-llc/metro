@@ -5,7 +5,7 @@ import type { OrgContext } from "@/server/auth/context";
 import { logActivity } from "@/server/services/activity.service";
 import { tryAutoFetchDemographics } from "@/server/services/demographics.service";
 import { requireProperty } from "@/server/services/property.service";
-import { createAsset } from "@/server/services/asset.service";
+import { createAsset, getAsset } from "@/server/services/asset.service";
 import { getMapProvider } from "@/server/providers/maps";
 import { enqueueJob } from "@/server/jobs/runner";
 import type { MapCreateInput, MapParams } from "@/features/maps/schemas";
@@ -160,6 +160,38 @@ export async function deleteMapAsset(ctx: OrgContext, mapAssetId: string) {
   });
   if (!mapAsset) throw new ApiError("NOT_FOUND", "Map not found");
   await db.mapAsset.delete({ where: { id: mapAssetId } });
+}
+
+/** Registers a Studio-flattened map page as the public image for this map slot. */
+export async function registerMapExport(
+  ctx: OrgContext,
+  mapAssetId: string,
+  assetId: string,
+): Promise<MapAsset> {
+  await getAsset(ctx, assetId);
+  const mapAsset = await db.mapAsset.findFirst({
+    where: { id: mapAssetId, property: { organizationId: ctx.organizationId } },
+  });
+  if (!mapAsset) throw new ApiError("NOT_FOUND", "Map not found");
+
+  const updated = await db.mapAsset.update({
+    where: { id: mapAssetId },
+    data: {
+      imageAssetId: assetId,
+      status: "READY",
+      error: null,
+    },
+  });
+
+  await logActivity(ctx, {
+    propertyId: mapAsset.propertyId,
+    entityType: "mapAsset",
+    entityId: mapAssetId,
+    action: "studio-exported",
+    detail: { kind: mapAsset.kind, assetId },
+  });
+
+  return updated;
 }
 
 type StoredMapParams = MapRenderParams & {

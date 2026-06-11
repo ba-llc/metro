@@ -132,6 +132,7 @@ export function useRegisterSitePlanPage(sitePlanId: string) {
       assetId: string;
       width: number;
       height: number;
+      sourceMapAssetId?: string | null;
     }) =>
       apiFetch<SitePlanPageDetail>(`/api/site-plans/${sitePlanId}/pages`, {
         method: "POST",

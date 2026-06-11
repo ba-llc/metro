@@ -43,6 +43,8 @@ type ShellProps = {
   onAnalyze: () => void;
   onVersions: () => void;
   onExport: () => void;
+  publicExportReady?: boolean;
+  publicExportLabel?: string;
   toolRail: ReactNode;
   leftPanel: ReactNode;
   canvas: ReactNode;
@@ -69,6 +71,8 @@ export function StudioShell({
   onAnalyze,
   onVersions,
   onExport,
+  publicExportReady = false,
+  publicExportLabel,
   toolRail,
   leftPanel,
   canvas,
@@ -142,7 +146,8 @@ export function StudioShell({
           </Button>
           <Button size="sm" loading={exporting} onClick={onExport}>
             <Download className="size-4" />
-            Export
+            {publicExportLabel ??
+              (publicExportReady ? "Update Public Site Plan" : "Use on Public Site")}
           </Button>
         </div>
       </header>

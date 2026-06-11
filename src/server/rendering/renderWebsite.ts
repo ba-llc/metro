@@ -11,24 +11,13 @@ function img(images: RenderImages, assetId: string | null): string | null {
   return assetId ? (images[assetId] ?? null) : null;
 }
 
-const legacyOrangeAccents = new Set([
-  "#c44715",
-  "#ea580c",
-  "#e95420",
-  "#f4511e",
-  "#f97316",
-  "#ff5a1f",
-]);
 
 function normalizeWebsiteTheme(theme: Partial<TemplateTheme> | undefined): TemplateTheme {
   const parsed = templateThemeSchema.parse({
     ...metroCommercialTheme,
     ...(theme ?? {}),
   });
-  const accent = parsed.accentColor.toLowerCase();
-  return legacyOrangeAccents.has(accent)
-    ? { ...parsed, accentColor: metroCommercialTheme.accentColor }
-    : parsed;
+  return { ...parsed, accentColor: metroCommercialTheme.accentColor };
 }
 
 function addressLine(context: RenderContext): string {
@@ -39,7 +28,7 @@ function addressLine(context: RenderContext): string {
 
 function deckCss(theme: TemplateTheme): string {
   const primary = theme.primaryColor;
-  const accent = theme.accentColor;
+  const accent = metroCommercialTheme.accentColor;
   return `
     :root {
       --primary-900: ${primary};
@@ -64,11 +53,14 @@ function deckCss(theme: TemplateTheme): string {
     .deck-toggle__btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font: 500 12px var(--body-font); color: rgba(255,255,255,0.6); background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
     .deck-toggle__btn--active { background: rgba(255,255,255,0.12); color: #fff; }
 
-    .deck-sidenav { position: fixed; top: 50%; left: 20px; transform: translateY(-50%); z-index: 150; }
-    .deck-sidenav__pill { width: 36px; height: 36px; border-radius: 10px; background: rgba(0,0,0,0.55); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.6); cursor: pointer; }
-    .deck-sidenav:hover .deck-sidenav__pill { color: #fff; }
-    .deck-sidenav__menu { position: absolute; left: 46px; top: 50%; transform: translateY(-50%) translateX(-8px); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; }
-    .deck-sidenav:hover .deck-sidenav__menu { opacity: 1; transform: translateY(-50%) translateX(0); pointer-events: auto; }
+    .deck-sidenav { position: fixed; top: 50%; left: 20px; transform: translateY(-50%); z-index: 200; padding: 28px 34px 28px 0; }
+    .deck-sidenav__pill { width: 36px; height: 36px; border-radius: 10px; background: rgba(0,0,0,0.55); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.6); cursor: pointer; padding: 0; font: inherit; }
+    .deck-sidenav:hover .deck-sidenav__pill,
+    .deck-sidenav--open .deck-sidenav__pill { color: #fff; }
+    .deck-sidenav__menu { position: absolute; left: 36px; top: 50%; transform: translateY(-50%) translateX(-8px); opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; padding-left: 6px; }
+    .deck-sidenav__menu::before { content: ''; position: absolute; right: 100%; top: -16px; bottom: -16px; width: 14px; }
+    .deck-sidenav:hover .deck-sidenav__menu,
+    .deck-sidenav--open .deck-sidenav__menu { opacity: 1; transform: translateY(-50%) translateX(0); pointer-events: auto; }
     .deck-sidenav__menu-inner { background: rgba(0,0,0,0.75); backdrop-filter: blur(16px); padding: 8px 4px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); min-width: 200px; }
     .deck-sidenav__item { display: block; padding: 8px 16px; font: 500 13px var(--body-font); color: rgba(255,255,255,0.7); text-decoration: none; border-radius: 6px; }
     .deck-sidenav__item:hover { background: rgba(255,255,255,0.08); color: #fff; }
@@ -91,12 +83,11 @@ function deckCss(theme: TemplateTheme): string {
     .deck-reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.5s cubic-bezier(0.16,1,0.3,1), transform 0.5s cubic-bezier(0.16,1,0.3,1); }
     .deck-reveal.is-visible { opacity: 1; transform: none; }
 
-    .deck-eyebrow { font-size: 11px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--primary-600); margin-bottom: 1rem; display: flex; align-items: center; gap: 10px; }
-    .deck-eyebrow::before { content: ''; width: 24px; height: 1px; background: currentColor; }
-    .deck-section--dark .deck-eyebrow { color: var(--primary-400); }
+    .deck-eyebrow { font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: ${accent}; margin-bottom: 1rem; display: flex; align-items: center; gap: 12px; }
+    .deck-eyebrow::before { content: ''; width: 28px; height: 2px; background: currentColor; }
     .deck-headline { font-size: clamp(36px, 5vw, 64px); line-height: 1.05; font-weight: 800; margin: 0 0 1rem; }
-    .deck-headline em { font-style: normal; color: var(--primary-600); }
-    .deck-section--dark .deck-headline em { color: var(--primary-400); }
+    .deck-headline em { font-style: normal; color: ${accent}; }
+    .deck-section--dark .deck-headline em { color: ${accent}; }
     .deck-subhead { font-size: clamp(16px, 2vw, 20px); line-height: 1.6; color: var(--text-muted); max-width: 52ch; }
     .deck-section--dark .deck-subhead { color: rgba(255,255,255,0.75); }
 
@@ -219,6 +210,32 @@ const deckScript = `
   }
 
   if (webBtn) webBtn.classList.add('deck-toggle__btn--active');
+
+  var sidenav = document.querySelector('.deck-sidenav');
+  if (sidenav) {
+    var sidenavPill = sidenav.querySelector('.deck-sidenav__pill');
+    function setSidenavOpen(open) {
+      sidenav.classList.toggle('deck-sidenav--open', open);
+      if (sidenavPill) sidenavPill.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    if (sidenavPill) {
+      sidenavPill.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setSidenavOpen(!sidenav.classList.contains('deck-sidenav--open'));
+      });
+    }
+    sidenav.addEventListener('click', function (e) {
+      e.stopPropagation();
+    });
+    document.addEventListener('click', function () {
+      setSidenavOpen(false);
+    });
+    sidenav.querySelectorAll('.deck-sidenav__item').forEach(function (el) {
+      el.addEventListener('click', function () {
+        setSidenavOpen(false);
+      });
+    });
+  }
 })();
 `;
 
@@ -234,6 +251,9 @@ function buildSections(input: {
   const addr = addressLine(context);
   const hero = img(images, context.imageAssets.hero);
   const aerial = img(images, context.imageAssets.aerial);
+  const tradeArea = img(images, context.imageAssets.tradeArea);
+  const radius = img(images, context.imageAssets.radius);
+  const retail = img(images, context.imageAssets.retail);
   const sitePlan = img(images, context.imageAssets.sitePlan);
   const sections: SectionDef[] = [];
 
@@ -274,6 +294,24 @@ function buildSections(input: {
     });
   }
 
+  if (tradeArea) {
+    sections.push({
+      id: "trade-area",
+      label: "Trade Area",
+      variant: "white",
+      html: `
+        <div class="deck-split">
+          <div>
+            <div class="deck-eyebrow deck-reveal">Trade Area</div>
+            <h2 class="deck-headline deck-reveal">Regional <em>draw</em></h2>
+            <p class="deck-subhead deck-reveal">A broader market view showing the property position inside the surrounding retail corridor.</p>
+          </div>
+          <div class="deck-reveal"><img class="deck-image" src="${tradeArea}" alt="Trade area map" /></div>
+        </div>
+      `,
+    });
+  }
+
   if (sitePlan || context.spaces.length) {
     const rows = context.spaces
       .map(
@@ -300,18 +338,76 @@ function buildSections(input: {
   if (context.demographics.length) {
     const demo = context.demographics[0];
     const metrics = demo?.metrics ?? {};
+    const rows: Array<[string, string, (value: number) => string]> = [
+      ["population", "Population", (value) => value.toLocaleString()],
+      ["households", "Households", (value) => value.toLocaleString()],
+      ["avgHouseholdIncome", "Avg HH Income", formatCurrency],
+      ["daytimePopulation", "Daytime Population", (value) => value.toLocaleString()],
+      ["medianHousingValue", "Median Home Value", formatCurrency],
+      ["medianAge", "Median Age", (value) => value.toFixed(1)],
+    ];
+    const table = `
+      <table class="deck-table deck-reveal">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            ${context.demographics.map((set) => `<th>${set.label}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map(
+              ([key, label, formatter]) => `
+                <tr>
+                  <td>${label}</td>
+                  ${context.demographics
+                    .map((set) => {
+                      const value = set.metrics[key];
+                      return `<td>${typeof value === "number" ? formatter(value) : "—"}</td>`;
+                    })
+                    .join("")}
+                </tr>`,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
     sections.push({
       id: "demographics",
       label: "Demographics",
       variant: "light",
       html: `
-        <div class="deck-eyebrow deck-reveal">Market Data</div>
-        <h2 class="deck-headline deck-reveal">${demo?.label ?? "Trade area"} <em>demographics</em></h2>
-        <div class="deck-stat-grid deck-reveal">
-          ${metrics.population != null ? `<div class="deck-stat"><div class="deck-stat-value">${metrics.population.toLocaleString()}</div><div class="deck-stat-label">Population</div></div>` : ""}
-          ${metrics.households != null ? `<div class="deck-stat"><div class="deck-stat-value">${metrics.households.toLocaleString()}</div><div class="deck-stat-label">Households</div></div>` : ""}
-          ${metrics.avgIncome != null ? `<div class="deck-stat"><div class="deck-stat-value">${formatCurrency(metrics.avgIncome)}</div><div class="deck-stat-label">Avg Income</div></div>` : ""}
-          ${metrics.daytimePopulation != null ? `<div class="deck-stat"><div class="deck-stat-value">${metrics.daytimePopulation.toLocaleString()}</div><div class="deck-stat-label">Daytime Pop.</div></div>` : ""}
+        <div class="${radius ? "deck-split" : ""}">
+          <div>
+            <div class="deck-eyebrow deck-reveal">Market Data</div>
+            <h2 class="deck-headline deck-reveal">${demo?.label ?? "Trade area"} <em>demographics</em></h2>
+            <div class="deck-stat-grid deck-reveal">
+              ${metrics.population != null ? `<div class="deck-stat"><div class="deck-stat-value">${metrics.population.toLocaleString()}</div><div class="deck-stat-label">Population</div></div>` : ""}
+              ${metrics.households != null ? `<div class="deck-stat"><div class="deck-stat-value">${metrics.households.toLocaleString()}</div><div class="deck-stat-label">Households</div></div>` : ""}
+              ${metrics.avgHouseholdIncome != null ? `<div class="deck-stat"><div class="deck-stat-value">${formatCurrency(metrics.avgHouseholdIncome)}</div><div class="deck-stat-label">Avg HH Income</div></div>` : ""}
+              ${metrics.daytimePopulation != null ? `<div class="deck-stat"><div class="deck-stat-value">${metrics.daytimePopulation.toLocaleString()}</div><div class="deck-stat-label">Daytime Pop.</div></div>` : ""}
+            </div>
+            ${table}
+          </div>
+          ${radius ? `<div class="deck-reveal"><img class="deck-image" src="${radius}" alt="Radius demographics map" /></div>` : ""}
+        </div>
+      `,
+    });
+  }
+
+  if (retail) {
+    sections.push({
+      id: "retail-context",
+      label: "Retail Context",
+      variant: "white",
+      html: `
+        <div class="deck-split">
+          <div>
+            <div class="deck-eyebrow deck-reveal">Retail Context</div>
+            <h2 class="deck-headline deck-reveal">Nearby <em>retail</em> drivers</h2>
+            <p class="deck-subhead deck-reveal">Generated retail context showing nearby anchors, services, and activity around the property.</p>
+          </div>
+          <div class="deck-reveal"><img class="deck-image" src="${retail}" alt="Retail context map" /></div>
         </div>
       `,
     });
@@ -396,12 +492,15 @@ export function renderWebsiteHtml(input: {
   return `<!DOCTYPE html>
 <html lang="en" class="deck-page">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
-  <meta name="description" content="${input.context.property.description ?? title}">
-  <style>${deckCss(theme)}</style>
-</head>
+	  <meta charset="UTF-8">
+	  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	  <title>${title}</title>
+	  <meta name="description" content="${input.context.property.description ?? title}">
+	  <link rel="icon" type="image/png" href="/brand/favicon.png">
+	  <link rel="shortcut icon" type="image/png" href="/brand/favicon.png">
+	  <link rel="apple-touch-icon" href="/brand/favicon.png">
+	  <style>${deckCss(theme)}</style>
+	</head>
 <body>
   <div class="deck-toggle-bar">
     <div class="deck-toggle">
@@ -410,7 +509,7 @@ export function renderWebsiteHtml(input: {
     </div>
   </div>
   <nav class="deck-sidenav" aria-label="Sections">
-    <div class="deck-sidenav__pill" aria-hidden="true">☰</div>
+    <button type="button" class="deck-sidenav__pill" aria-expanded="false" aria-label="Open section menu">☰</button>
     <div class="deck-sidenav__menu"><div class="deck-sidenav__menu-inner">${navItems}</div></div>
   </nav>
   <div class="deck-slide-nav" aria-label="Slide navigation">

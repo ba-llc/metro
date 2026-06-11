@@ -332,15 +332,18 @@ model SitePlanPage {
   sitePlanId   String
   pageNumber   Int
   imageAssetId String
+  sourceMapAssetId String?
   width        Int
   height       Int
   createdAt    DateTime @default(now())
 
   sitePlan   SitePlan          @relation(fields: [sitePlanId], references: [id], onDelete: Cascade)
   imageAsset Asset             @relation(fields: [imageAssetId], references: [id])
+  sourceMapAsset MapAsset?      @relation(fields: [sourceMapAssetId], references: [id], onDelete: SetNull)
   layers     AnnotationLayer[]
 
   @@unique([sitePlanId, pageNumber])
+  @@index([sourceMapAssetId])
 }
 
 model AnnotationLayer {
@@ -421,8 +424,9 @@ model MapAsset {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  imageAsset Asset?   @relation(fields: [imageAssetId], references: [id])
+  property    Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  imageAsset  Asset?         @relation(fields: [imageAssetId], references: [id])
+  studioPages SitePlanPage[]
 
   @@index([propertyId, kind])
 }

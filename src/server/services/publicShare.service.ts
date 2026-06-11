@@ -2,6 +2,15 @@ import type { TemplateChannel } from "@prisma/client";
 import { db } from "@/server/db";
 import { ApiError } from "@/server/api/respond";
 import { getStorage } from "@/server/providers/storage";
+import type { OrgContext } from "@/server/auth/context";
+import { resolveRenderContext } from "@/server/rendering/resolve";
+import { loadRenderImages } from "@/server/rendering/loadImages";
+import { renderWebsiteHtml } from "@/server/rendering/renderWebsite";
+import {
+  metroCommercialTheme,
+  type TemplatePage,
+  type TemplateTheme,
+} from "@/features/marketing/schemas";
 import {
   channelFromSlug,
   channelSharePath,
@@ -96,7 +105,7 @@ export async function getPublishedWebsiteDocument(propertyId: string) {
     include: {
       publishedWebsiteDocument: {
         include: {
-          template: { select: { name: true } },
+          template: true,
           outputAsset: { select: { id: true, mime: true, filename: true } },
         },
       },
@@ -105,6 +114,40 @@ export async function getPublishedWebsiteDocument(propertyId: string) {
   const doc = publication?.publishedWebsiteDocument;
   if (!doc || doc.status !== "READY" || !doc.outputAssetId) return null;
   return doc;
+}
+
+function websiteTheme(theme: Partial<TemplateTheme>): TemplateTheme {
+  return { ...metroCommercialTheme, ...theme, accentColor: metroCommercialTheme.accentColor };
+}
+
+function publicOrgContext(organizationId: string): OrgContext {
+  return {
+    organizationId,
+    userId: "public-website",
+    role: "BROKER",
+  };
+}
+
+/** Live-render the published property website from the current Property Record. */
+export async function renderPublishedWebsiteHtml(
+  propertyId: string,
+): Promise<string | null> {
+  const doc = await getPublishedWebsiteDocument(propertyId);
+  if (!doc) return null;
+
+  const property = await db.property.findFirst({
+    where: { id: propertyId, deletedAt: null, status: "ACTIVE" },
+    select: { organizationId: true },
+  });
+  if (!property) return null;
+
+  const ctx = publicOrgContext(property.organizationId);
+  const context = await resolveRenderContext(ctx, propertyId);
+  const images = await loadRenderImages(ctx, context);
+  const theme = websiteTheme(doc.template.theme as Partial<TemplateTheme>);
+  const pages = doc.template.pages as TemplatePage[];
+
+  return renderWebsiteHtml({ theme, pages, context, images });
 }
 
 export async function listDocumentVersions(
