@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
@@ -598,6 +598,23 @@ function TemplateOptionCard({
   );
 }
 
+function TemplateSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>
+    </section>
+  );
+}
+
 export default function MarketingPage({
   params,
 }: {
@@ -624,6 +641,15 @@ export default function MarketingPage({
   const channelGroups =
     library?.channels ??
     ([] as ChannelShareGroup[]);
+  const availableTemplates = templates?.filter(
+    (template) => template.channel !== "EMAIL",
+  );
+  const siteTemplates = availableTemplates?.filter(
+    (template) => template.channel === "WEBSITE",
+  );
+  const marketingTemplates = availableTemplates?.filter(
+    (template) => template.channel !== "WEBSITE",
+  );
 
   const inProgress =
     library?.documents.some(
@@ -636,7 +662,7 @@ export default function MarketingPage({
         title="Marketing"
         subtitle="Generate website drafts and marketing PDFs from the property record. Publish controls when the public property site goes live."
         actions={
-          <Button onClick={() => setGenerateOpen(true)}>Generate Document</Button>
+          <Button onClick={() => setGenerateOpen(true)}>Generate</Button>
         }
       />
 
@@ -667,10 +693,10 @@ export default function MarketingPage({
       ) : !library || library.documents.length === 0 ? (
         <EmptyState
           title="No documents yet"
-          description="Generate a leasing flyer, property website, or brochure from the property record."
+          description="Generate a public property site draft or a marketing PDF from the property record."
           action={
             <Button onClick={() => setGenerateOpen(true)}>
-              Generate Document
+              Generate
             </Button>
           }
         />
@@ -708,32 +734,44 @@ export default function MarketingPage({
       <Modal
         open={generateOpen}
         onClose={() => setGenerateOpen(false)}
-        title="Generate Document"
+        title="Generate"
         size="xl"
       >
         <div className="space-y-4">
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-600">
-              Choose a template format
+              Choose what to generate
             </p>
             {!templates ? (
               <TemplateGridSkeleton count={3} />
-            ) : templates.length === 0 ? (
+            ) : !availableTemplates || availableTemplates.length === 0 ? (
               <p className="text-sm text-slate-600">No templates available.</p>
             ) : (
-              <div
-                role="radiogroup"
-                aria-label="Document template format"
-                className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-              >
-                {templates.map((template) => (
-                  <TemplateOptionCard
-                    key={template.id}
-                    template={template}
-                    selected={template.id === templateId}
-                    onSelect={setTemplateId}
-                  />
-                ))}
+              <div role="radiogroup" aria-label="Template format" className="space-y-6">
+                {siteTemplates && siteTemplates.length > 0 ? (
+                  <TemplateSection title="Site">
+                    {siteTemplates.map((template) => (
+                      <TemplateOptionCard
+                        key={template.id}
+                        template={template}
+                        selected={template.id === templateId}
+                        onSelect={setTemplateId}
+                      />
+                    ))}
+                  </TemplateSection>
+                ) : null}
+                {marketingTemplates && marketingTemplates.length > 0 ? (
+                  <TemplateSection title="Marketing formats">
+                    {marketingTemplates.map((template) => (
+                      <TemplateOptionCard
+                        key={template.id}
+                        template={template}
+                        selected={template.id === templateId}
+                        onSelect={setTemplateId}
+                      />
+                    ))}
+                  </TemplateSection>
+                ) : null}
               </div>
             )}
           </div>

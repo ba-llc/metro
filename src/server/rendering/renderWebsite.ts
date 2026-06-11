@@ -1,4 +1,5 @@
 import {
+  metroCommercialTheme,
   templateThemeSchema,
   type TemplatePage,
   type TemplateTheme,
@@ -8,6 +9,26 @@ import type { RenderContext, RenderImages } from "./types";
 
 function img(images: RenderImages, assetId: string | null): string | null {
   return assetId ? (images[assetId] ?? null) : null;
+}
+
+const legacyOrangeAccents = new Set([
+  "#c44715",
+  "#ea580c",
+  "#e95420",
+  "#f4511e",
+  "#f97316",
+  "#ff5a1f",
+]);
+
+function normalizeWebsiteTheme(theme: Partial<TemplateTheme> | undefined): TemplateTheme {
+  const parsed = templateThemeSchema.parse({
+    ...metroCommercialTheme,
+    ...(theme ?? {}),
+  });
+  const accent = parsed.accentColor.toLowerCase();
+  return legacyOrangeAccents.has(accent)
+    ? { ...parsed, accentColor: metroCommercialTheme.accentColor }
+    : parsed;
 }
 
 function addressLine(context: RenderContext): string {
@@ -345,7 +366,7 @@ export function renderWebsiteHtml(input: {
   context: RenderContext;
   images: RenderImages;
 }): string {
-  const theme = templateThemeSchema.parse(input.theme ?? {});
+  const theme = normalizeWebsiteTheme(input.theme);
   const sections = buildSections({ ...input, theme });
   const title = `${input.context.property.name} — ${theme.brandName}`;
 

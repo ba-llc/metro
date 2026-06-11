@@ -43,12 +43,6 @@ export const systemTemplates: {
     ],
   },
   {
-    name: "Metro Commercial Email Flyer",
-    channel: "EMAIL",
-    theme: metroCommercialTheme,
-    pages: [{ block: "cover" }],
-  },
-  {
     name: "Metro Commercial Property Website",
     channel: "WEBSITE",
     theme: metroCommercialTheme,
@@ -63,33 +57,23 @@ export const systemTemplates: {
   },
 ];
 
-function themeIsEmpty(theme: unknown): boolean {
-  return (
-    theme == null ||
-    (typeof theme === "object" &&
-      !Array.isArray(theme) &&
-      Object.keys(theme).length === 0)
-  );
-}
-
-const retiredSystemTemplateNames = ["Metro Commercial Property Brochure"];
+const retiredSystemTemplateNames = [
+  "Metro Commercial Property Brochure",
+  "Metro Commercial Email Flyer",
+];
 
 async function retireRemovedSystemTemplates(): Promise<void> {
   for (const name of retiredSystemTemplateNames) {
     const templates = await db.template.findMany({
       where: { isSystem: true, name },
-      select: { id: true, _count: { select: { documents: true } } },
+      select: { id: true },
     });
 
     for (const template of templates) {
-      if (template._count.documents === 0) {
-        await db.template.delete({ where: { id: template.id } });
-      } else {
-        await db.template.update({
-          where: { id: template.id },
-          data: { isSystem: false },
-        });
-      }
+      await db.template.update({
+        where: { id: template.id },
+        data: { isSystem: false },
+      });
     }
   }
 }
@@ -112,7 +96,7 @@ export async function ensureSystemTemplates(): Promise<void> {
           isSystem: true,
         },
       });
-    } else if (themeIsEmpty(existing.theme)) {
+    } else {
       await db.template.update({
         where: { id: existing.id },
         data: { theme: t.theme as Prisma.InputJsonValue },
@@ -130,6 +114,7 @@ export async function listTemplates(
     where: {
       OR: [{ isSystem: true }, { organizationId: ctx.organizationId }],
       ...(channel ? { channel } : {}),
+      channel: channel ?? { not: "EMAIL" },
     },
     orderBy: [{ isSystem: "desc" }, { name: "asc" }],
   });

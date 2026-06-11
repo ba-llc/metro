@@ -9,7 +9,11 @@ import { resolveRenderContext } from "@/server/rendering/resolve";
 import { renderDocumentHtml, renderEmailHtml } from "@/server/rendering/renderHtml";
 import { renderWebsiteHtml } from "@/server/rendering/renderWebsite";
 import type { RenderContext, RenderImages } from "@/server/rendering/types";
-import type { TemplatePage, TemplateTheme } from "@/features/marketing/schemas";
+import {
+  metroCommercialTheme,
+  type TemplatePage,
+  type TemplateTheme,
+} from "@/features/marketing/schemas";
 import {
   buildShareLinks,
   type PublicPropertyRef,
@@ -73,6 +77,25 @@ const CHANNEL_LABELS: Record<TemplateChannel, string> = {
   SOCIAL: "Social Graphic",
   WEBSITE: "Property Website",
 };
+
+const legacyOrangeAccents = new Set([
+  "#c44715",
+  "#ea580c",
+  "#e95420",
+  "#f4511e",
+  "#f97316",
+  "#ff5a1f",
+]);
+
+function renderTheme(theme: Partial<TemplateTheme>): TemplateTheme {
+  const merged = {
+    ...metroCommercialTheme,
+    ...theme,
+  };
+  return legacyOrangeAccents.has(merged.accentColor.toLowerCase())
+    ? { ...merged, accentColor: metroCommercialTheme.accentColor }
+    : merged;
+}
 
 async function nextVersionNumber(
   propertyId: string,
@@ -480,7 +503,7 @@ export async function renderDocument(
   try {
     const context = await resolveRenderContext(ctx, doc.propertyId);
     const images = await loadImages(ctx, context);
-    const theme = doc.template.theme as Partial<TemplateTheme>;
+    const theme = renderTheme(doc.template.theme as Partial<TemplateTheme>);
     const pages = doc.template.pages as TemplatePage[];
 
     let body: Buffer;
