@@ -50,6 +50,18 @@ export function formatDate(date: string | Date): string {
   });
 }
 
+/** `just now`, `4h ago`, `3d ago`; falls back to `Jun 2, 2026` past a week. */
+export function timeAgo(date: string | Date): string {
+  const minutes = Math.floor((Date.now() - new Date(date).getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return formatDate(date);
+}
+
 export function labelize(value: string): string {
   return value
     .toLowerCase()

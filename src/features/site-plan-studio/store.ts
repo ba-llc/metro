@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type {
   AnnotationData,
   AnnotationLayerData,
+  PageAnnotations,
 } from "@/types/annotations";
 import type { SitePlanPageDetail } from "./types";
 
@@ -24,6 +25,7 @@ type StudioState = {
   selectedId: string | null;
   activeToolId: string;
   dirty: boolean;
+  reviewSuggestions: PageAnnotations | null;
 
   loadPage: (page: SitePlanPageDetail) => void;
   setTool: (toolId: string) => void;
@@ -32,10 +34,10 @@ type StudioState = {
   addAnnotation: (a: Omit<AnnotationData, "id" | "layerId" | "zIndex">) => string;
   updateAnnotation: (id: string, patch: Partial<AnnotationData>) => void;
   removeAnnotation: (id: string) => void;
-  importSuggestionLayer: (payload: {
-    layers: AnnotationLayerData[];
-    annotations: AnnotationData[];
-  }) => void;
+  stageSuggestionLayer: (payload: PageAnnotations) => void;
+  updateSuggestionAnnotation: (id: string, patch: Partial<AnnotationData>) => void;
+  acceptSuggestions: () => void;
+  discardSuggestions: () => void;
 
   addLayer: (name: string) => void;
   updateLayer: (id: string, patch: Partial<AnnotationLayerData>) => void;
@@ -54,6 +56,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
   selectedId: null,
   activeToolId: "select",
   dirty: false,
+  reviewSuggestions: null,
 
   loadPage: (page) =>
     set({
@@ -63,6 +66,7 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       activeLayerId: page.layers[0]?.id ?? null,
       selectedId: null,
       dirty: false,
+      reviewSuggestions: null,
     }),
 
   setTool: (toolId) => set({ activeToolId: toolId, selectedId: null }),
@@ -101,29 +105,61 @@ export const useStudioStore = create<StudioState>((set, get) => ({
       dirty: true,
     })),
 
-  importSuggestionLayer: (payload) =>
+  stageSuggestionLayer: (payload) =>
+    set({
+      reviewSuggestions: {
+        layers: payload.layers.map((layer, index) => ({
+          ...layer,
+          sortOrder: index,
+          visible: true,
+          locked: false,
+        })),
+        annotations: payload.annotations,
+      },
+      selectedId: null,
+      activeToolId: "select",
+    }),
+
+  updateSuggestionAnnotation: (id, patch) =>
     set((s) => {
-      const keptLayers = s.layers.filter(
-        (layer) => !layer.name.startsWith("AI Suggestions"),
-      );
-      const keptLayerIds = new Set(keptLayers.map((layer) => layer.id));
-      const importedLayers = payload.layers.map((layer, index) => ({
+      if (!s.reviewSuggestions) return s;
+      return {
+        reviewSuggestions: {
+          ...s.reviewSuggestions,
+          annotations: s.reviewSuggestions.annotations.map((a) =>
+            a.id === id ? { ...a, ...patch } : a,
+          ),
+        },
+      };
+    }),
+
+  acceptSuggestions: () =>
+    set((s) => {
+      if (!s.reviewSuggestions) return s;
+      const nextSortStart = s.layers.length;
+      const acceptedLayers = s.reviewSuggestions.layers.map((layer, index) => ({
         ...layer,
-        sortOrder: keptLayers.length + index,
+        name: "Broker Edits",
+        sortOrder: nextSortStart + index,
         visible: true,
         locked: false,
       }));
       return {
-        layers: [...keptLayers, ...importedLayers],
-        annotations: [
-          ...s.annotations.filter((a) => keptLayerIds.has(a.layerId)),
-          ...payload.annotations,
-        ],
-        activeLayerId: importedLayers[0]?.id ?? s.activeLayerId,
+        layers: [...s.layers, ...acceptedLayers],
+        annotations: [...s.annotations, ...s.reviewSuggestions.annotations],
+        activeLayerId: acceptedLayers[0]?.id ?? s.activeLayerId,
         selectedId: null,
         activeToolId: "select",
+        reviewSuggestions: null,
         dirty: true,
       };
+    }),
+
+  discardSuggestions: () =>
+    set({
+      reviewSuggestions: null,
+      selectedId: null,
+      activeToolId: "select",
     }),
 
   addLayer: (name) =>

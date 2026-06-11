@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import type { SitePlanDetail } from "../types";
 import { ResizableStudioPanels } from "./resizable-panels";
 
-export type StudioMode = "edit" | "review" | "preview";
+export type StudioMode = "edit" | "review";
 export type RightPanelTab = "inspect" | "layers" | "data";
 
 type ShellProps = {
@@ -35,6 +35,8 @@ type ShellProps = {
   analyzing: boolean;
   exporting: boolean;
   analysisMessage: string | null;
+  analysisTone?: "info" | "warning" | "error";
+  reviewSuggestionCount: number;
   onAnalyze: () => void;
   onVersions: () => void;
   onExport: () => void;
@@ -58,6 +60,8 @@ export function StudioShell({
   analyzing,
   exporting,
   analysisMessage,
+  analysisTone = "info",
+  reviewSuggestionCount,
   onAnalyze,
   onVersions,
   onExport,
@@ -68,6 +72,13 @@ export function StudioShell({
   statusBar,
   children,
 }: ShellProps) {
+  const modeTabs: Array<
+    [StudioMode, ComponentType<{ className?: string }>, string]
+  > = [["edit", MousePointer2, "Edit"]];
+  if (reviewSuggestionCount > 0) {
+    modeTabs.push(["review", Sparkles, "AI Review"]);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
       <header className="grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b border-slate-200 bg-white/95 px-4 shadow-sm">
@@ -86,6 +97,9 @@ export function StudioShell({
                 {plan.title}
               </p>
               <SaveState dirty={dirty} saving={saving} />
+              {reviewSuggestionCount > 0 ? (
+                <ReviewState count={reviewSuggestionCount} />
+              ) : null}
             </div>
             <p className="truncate text-xs text-slate-500">
               {plan.property.name} / Page {pageIndex + 1} of {plan.pages.length}
@@ -94,13 +108,7 @@ export function StudioShell({
         </div>
 
         <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 p-1">
-          {(
-            [
-              ["edit", MousePointer2, "Edit"],
-              ["review", Sparkles, "AI Review"],
-              ["preview", FileImage, "Preview"],
-            ] satisfies Array<[StudioMode, ComponentType<{ className?: string }>, string]>
-          ).map(([id, Icon, label]) => (
+          {modeTabs.map(([id, Icon, label]) => (
             <button
               key={id}
               type="button"
@@ -159,7 +167,16 @@ export function StudioShell({
       </header>
 
       {analysisMessage ? (
-        <div className="shrink-0 border-b border-blue-100 bg-blue-50 px-4 py-2 text-xs text-blue-800">
+        <div
+          className={cn(
+            "shrink-0 border-b px-4 py-2 text-xs",
+            analysisTone === "warning"
+              ? "border-amber-200 bg-amber-50 text-amber-800"
+              : analysisTone === "error"
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-blue-100 bg-blue-50 text-blue-800",
+          )}
+        >
           {analysisMessage}
         </div>
       ) : null}
@@ -183,13 +200,20 @@ export function StudioShell({
               Select
               <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">H</kbd>
               Pan
-              <kbd className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">A</kbd>
-              Analyze
             </span>
           </>
         )}
       </footer>
     </div>
+  );
+}
+
+function ReviewState({ count }: { count: number }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+      <Sparkles className="size-3" />
+      {count} pending
+    </span>
   );
 }
 

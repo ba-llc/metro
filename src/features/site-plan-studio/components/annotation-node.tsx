@@ -211,7 +211,10 @@ export function AnnotationNode({
       <TenantLogoNode
         common={common}
         rect={{ x: r.x * pageW, y: r.y * pageH, w: r.w * pageW, h: r.h * pageH }}
+        pageW={pageW}
+        pageH={pageH}
         assetId={a.assetId ?? null}
+        onChange={onChange}
       />
     );
   }
@@ -264,11 +267,17 @@ export function AnnotationNode({
 function TenantLogoNode({
   common,
   rect,
+  pageW,
+  pageH,
   assetId,
+  onChange,
 }: {
   common: Record<string, unknown>;
   rect: { x: number; y: number; w: number; h: number };
+  pageW: number;
+  pageH: number;
   assetId: string | null;
+  onChange: (patch: Partial<AnnotationData>) => void;
 }) {
   const image = useHtmlImage(assetId ? assetUrl(assetId) : null);
   if (!image) {
@@ -298,14 +307,50 @@ function TenantLogoNode({
       </Fragment>
     );
   }
+  const imageAspect =
+    image.naturalWidth > 0 && image.naturalHeight > 0
+      ? image.naturalWidth / image.naturalHeight
+      : rect.w / rect.h;
+  const boxAspect = rect.w / rect.h;
+  const contained =
+    imageAspect > boxAspect
+      ? {
+          x: rect.x,
+          y: rect.y + (rect.h - rect.w / imageAspect) / 2,
+          w: rect.w,
+          h: rect.w / imageAspect,
+        }
+      : {
+          x: rect.x + (rect.w - rect.h * imageAspect) / 2,
+          y: rect.y,
+          w: rect.h * imageAspect,
+          h: rect.h,
+        };
+
   return (
     <KonvaImage
       {...common}
-      x={rect.x}
-      y={rect.y}
-      width={rect.w}
-      height={rect.h}
+      x={contained.x}
+      y={contained.y}
+      width={contained.w}
+      height={contained.h}
       image={image}
+      onTransformEnd={(e) => {
+        const node = e.target;
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        node.scale({ x: 1, y: 1 });
+        onChange({
+          geometry: {
+            rect: {
+              x: node.x() / pageW,
+              y: node.y() / pageH,
+              w: Math.max(0.005, (contained.w * scaleX) / pageW),
+              h: Math.max(0.005, (contained.h * scaleY) / pageH),
+            },
+          },
+        });
+      }}
     />
   );
 }

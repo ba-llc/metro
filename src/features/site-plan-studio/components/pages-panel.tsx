@@ -1,7 +1,6 @@
 "use client";
 
-import { Bot, FileImage, ImagePlus } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FileImage } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SitePlanDetail } from "../types";
 import { StudioPanel } from "./studio-shell";
@@ -10,19 +9,15 @@ export function PagesPanel({
   plan,
   activeIndex,
   onPageChange,
-  onAnalyze,
-  analyzing,
 }: {
   plan: SitePlanDetail;
   activeIndex: number;
   onPageChange: (index: number) => void;
-  onAnalyze: () => void;
-  analyzing: boolean;
 }) {
   return (
     <StudioPanel
-      title="Pages and Assets"
-      description="Navigate pages and start high-value actions without leaving the canvas."
+      title="Pages"
+      description="Switch between PDF pages in this site plan."
     >
       <div className="space-y-3">
         {plan.pages.map((page, index) => (
@@ -58,23 +53,6 @@ export function PagesPanel({
         ))}
       </div>
 
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3">
-        <div className="flex items-start gap-3">
-          <div className="inline-flex size-9 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-            <Bot className="size-4" />
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">AI overlay pass</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">
-              Propose editable availability overlays, labels, logos, and review callouts.
-            </p>
-          </div>
-        </div>
-        <Button className="mt-3 w-full" size="sm" loading={analyzing} onClick={onAnalyze}>
-          <ImagePlus className="size-4" />
-          Analyze Current Page
-        </Button>
-      </div>
     </StudioPanel>
   );
 }

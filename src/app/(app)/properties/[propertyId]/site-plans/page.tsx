@@ -94,30 +94,47 @@ export default function SitePlansPage({
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {sitePlans.map((plan) => (
-            <Card key={plan.id}>
-              <CardContent>
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-slate-900">{plan.title}</h3>
+            <Card key={plan.id} className="transition-shadow hover:shadow-md">
+              <CardContent className="flex h-full flex-col">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Site plan
+                  </p>
                   <StatusBadge status={plan.status} />
                 </div>
-                <p className="text-xs text-slate-500">
-                  {plan.pageCount} page{plan.pageCount === 1 ? "" : "s"} •{" "}
-                  {formatDate(plan.createdAt)}
-                </p>
-                <div className="mt-4 flex gap-2">
-                  <Link href={`/properties/${propertyId}/studio/${plan.id}`}>
+                <h3 className="mt-2 wrap-break-word text-lg font-semibold leading-6 text-slate-950">
+                  {plan.title}
+                </h3>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
+                  <span>
+                    {plan.pageCount} page{plan.pageCount === 1 ? "" : "s"}
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span>Uploaded {formatDate(plan.createdAt)}</span>
+                </div>
+
+                <div className="mt-5 flex items-center gap-2 border-t border-slate-100 pt-4">
+                  {plan.status === "READY" ? (
+                    <Link href={`/properties/${propertyId}/studio/${plan.id}`}>
+                      <Button size="sm" variant="secondary">
+                        Edit in Studio
+                      </Button>
+                    </Link>
+                  ) : (
                     <Button
                       size="sm"
                       variant="secondary"
-                      disabled={plan.status !== "READY"}
+                      disabled
+                      title="Site Plan Studio is available once processing completes."
                     >
                       Edit in Studio
                     </Button>
-                  </Link>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="text-red-600"
+                    className="text-slate-500 hover:bg-red-50 hover:text-red-600"
                     onClick={() => {
                       if (confirm("Delete this site plan and its annotations?")) {
                         deletePlan.mutate(plan.id);

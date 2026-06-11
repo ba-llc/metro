@@ -44,10 +44,22 @@ export const propertyCreateSchema = z.object({
   totalGla: z.coerce.number().int().positive().optional(),
   yearBuilt: z.coerce.number().int().min(1800).max(2100).optional(),
   parkingRatio: z.coerce.number().positive().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  googlePlaceId: z.string().optional(),
+  formattedAddress: z.string().optional(),
+  website: z.string().url().optional(),
+  phoneNumber: z.string().optional(),
+  placeTypes: z.array(z.string()).optional(),
   address: addressSchema,
 });
 
 export const propertyUpdateSchema = propertyCreateSchema.partial();
+
+export const propertyPlaceSearchSchema = z.object({
+  query: z.string().trim().min(3, "Type at least 3 characters"),
+  maxResults: z.coerce.number().int().positive().max(10).default(5),
+});
 
 export const propertyListFilterSchema = z.object({
   q: z.string().optional(),
@@ -90,6 +102,15 @@ const discoveredPlaceSchema = z.object({
   placeId: z.string().min(1),
   name: z.string().min(1),
   formattedAddress: z.string().optional(),
+  addressComponents: z
+    .array(
+      z.object({
+        longText: z.string(),
+        shortText: z.string(),
+        types: z.array(z.string()),
+      }),
+    )
+    .optional(),
   location: z.object({ lat: z.number(), lng: z.number() }).optional(),
   types: z.array(z.string()).default([]),
   primaryType: z.string().optional(),
@@ -136,6 +157,7 @@ export const photoCreateSchema = z.object({
 
 export type PropertyCreateInput = z.infer<typeof propertyCreateSchema>;
 export type PropertyUpdateInput = z.infer<typeof propertyUpdateSchema>;
+export type PropertyPlaceSearchInput = z.infer<typeof propertyPlaceSearchSchema>;
 export type SpaceCreateInput = z.infer<typeof spaceCreateSchema>;
 export type SpaceUpdateInput = z.infer<typeof spaceUpdateSchema>;
 export type TenantCreateInput = z.infer<typeof tenantCreateSchema>;

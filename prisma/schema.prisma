@@ -87,6 +87,7 @@ model Property {
   id             String         @id @default(cuid())
   organizationId String
   name           String
+  slug           String
   propertyType   PropertyType   @default(SHOPPING_CENTER)
   status         PropertyStatus @default(ACTIVE)
   description    String?
@@ -114,6 +115,7 @@ model Property {
   documents    GeneratedDocument[]
   activityLogs ActivityLog[]
 
+  @@unique([organizationId, slug])
   @@index([organizationId, status])
   @@index([organizationId, createdAt])
 }
@@ -479,6 +481,7 @@ model GeneratedDocument {
   propertyId    String
   templateId    String
   channel       TemplateChannel
+  versionNumber Int             @default(1)
   status        ArtifactStatus  @default(QUEUED)
   dataSnapshot  Json?           // exact resolved data used for the render
   outputAssetId String?
@@ -491,6 +494,7 @@ model GeneratedDocument {
   outputAsset Asset?   @relation(fields: [outputAssetId], references: [id])
 
   @@index([propertyId, createdAt])
+  @@index([propertyId, channel, versionNumber])
 }
 
 // ---------------------------------------------------------------------------

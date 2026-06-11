@@ -2,9 +2,9 @@
 
 import {
   ArrowUpRight,
-  Bot,
   BoxSelect,
   Building2,
+  Compass,
   Image,
   MapPinned,
   MousePointer2,
@@ -30,7 +30,7 @@ const iconByTool: Record<string, React.ReactNode> = {
   "parking-label": <Tag className="size-5" />,
   callout: <Tag className="size-5" />,
   "tenant-logo": <Image className="size-5" />,
-  "directional-indicator": <MapPinned className="size-5" />,
+  "directional-indicator": <Compass className="size-5" />,
 };
 
 const primaryTools = new Set([
@@ -49,34 +49,14 @@ const primaryTools = new Set([
 export function ToolRail({
   activeToolId,
   onToolChange,
-  onAnalyze,
-  analyzing,
 }: {
   activeToolId: string;
   onToolChange: (toolId: string) => void;
-  onAnalyze: () => void;
-  analyzing: boolean;
 }) {
   const visibleTools = tools.filter((tool) => primaryTools.has(tool.id));
 
   return (
     <div className="flex h-full flex-col items-center gap-2 overflow-y-auto p-3">
-      <ToolButton
-        label="AI Analyze"
-        active={false}
-        onClick={onAnalyze}
-        hot
-        disabled={analyzing}
-      >
-        {analyzing ? (
-          <span className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-        ) : (
-          <Bot className="size-5" />
-        )}
-      </ToolButton>
-
-      <div className="my-1 h-px w-9 bg-slate-200" />
-
       {visibleTools.map((tool) => (
         <ToolButton
           key={tool.id}
@@ -99,7 +79,6 @@ function iconForTool(tool: ToolDefinition) {
 function ToolButton({
   label,
   active,
-  hot,
   disabled,
   shortcut,
   onClick,
@@ -107,7 +86,6 @@ function ToolButton({
 }: {
   label: string;
   active: boolean;
-  hot?: boolean;
   disabled?: boolean;
   shortcut?: string;
   onClick: () => void;
@@ -128,9 +106,6 @@ function ToolButton({
       )}
     >
       {children}
-      {hot ? (
-        <span className="absolute right-2 top-2 size-2 rounded-full bg-orange-500 ring-4 ring-orange-100" />
-      ) : null}
       {shortcut ? (
         <span
           className={cn(

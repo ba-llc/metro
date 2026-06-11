@@ -12,6 +12,7 @@ import type {
   OccupancyCreateInput,
   PhotoCreateInput,
   PropertyCreateInput,
+  PropertyPlaceSearchInput,
   PropertyUpdateInput,
   SpaceCreateInput,
   SpaceUpdateInput,
@@ -66,6 +67,16 @@ export function useCreateProperty() {
     mutationFn: (input: PropertyCreateInput) =>
       apiFetch<PropertyListItem>("/api/properties", { method: "POST", json: input }),
     onSuccess: invalidate,
+  });
+}
+
+export function useSearchPropertyPlaces() {
+  return useMutation({
+    mutationFn: (input: PropertyPlaceSearchInput) =>
+      apiFetch<DiscoveredPlaceRecord[]>("/api/properties/place-search", {
+        method: "POST",
+        json: input,
+      }),
   });
 }
 

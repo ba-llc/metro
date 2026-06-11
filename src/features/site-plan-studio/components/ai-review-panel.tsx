@@ -10,19 +10,12 @@ export function AiReviewPanel({
 }: {
   onContinueEditing: () => void;
 }) {
-  const layers = useStudioStore((s) => s.layers);
-  const annotations = useStudioStore((s) => s.annotations);
+  const reviewSuggestions = useStudioStore((s) => s.reviewSuggestions);
   const select = useStudioStore((s) => s.select);
-  const removeLayer = useStudioStore((s) => s.removeLayer);
-  const updateLayer = useStudioStore((s) => s.updateLayer);
+  const acceptSuggestions = useStudioStore((s) => s.acceptSuggestions);
+  const discardSuggestions = useStudioStore((s) => s.discardSuggestions);
 
-  const suggestionLayers = layers.filter((layer) =>
-    layer.name.startsWith("AI Suggestions"),
-  );
-  const suggestionLayerIds = new Set(suggestionLayers.map((layer) => layer.id));
-  const suggestions = annotations.filter((annotation) =>
-    suggestionLayerIds.has(annotation.layerId),
-  );
+  const suggestions = reviewSuggestions?.annotations ?? [];
 
   return (
     <StudioPanel
@@ -39,10 +32,10 @@ export function AiReviewPanel({
               <p className="text-sm font-semibold text-slate-950">
                 {suggestions.length} suggestions ready
               </p>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                These are editable annotations. Move anything that is off, then
-                accept the layer or discard and analyze again.
-              </p>
+	              <p className="mt-1 text-sm leading-6 text-slate-600">
+	                These suggestions are editable, but they are not saved to the
+	                site plan until you accept them.
+	              </p>
             </div>
           </div>
         </div>
@@ -51,11 +44,10 @@ export function AiReviewPanel({
           <Button
             size="sm"
             onClick={() => {
-              for (const layer of suggestionLayers) {
-                updateLayer(layer.id, { name: "Broker Edits" });
-              }
+              acceptSuggestions();
               onContinueEditing();
             }}
+            disabled={suggestions.length === 0}
           >
             <Check className="size-4" />
             Accept
@@ -64,9 +56,7 @@ export function AiReviewPanel({
             size="sm"
             variant="secondary"
             onClick={() => {
-              for (const layer of suggestionLayers) {
-                removeLayer(layer.id);
-              }
+              discardSuggestions();
               onContinueEditing();
             }}
           >

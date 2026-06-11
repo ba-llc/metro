@@ -11,7 +11,7 @@ import { formatDate, formatRate } from "@/lib/utils";
 import { uploadAsset } from "@/lib/api";
 import type { AnnotationData } from "@/types/annotations";
 import { usePropertyDetail } from "@/features/properties/hooks";
-import type { SpaceRecord } from "@/features/properties/types";
+import type { OccupancyRecord, SpaceRecord } from "@/features/properties/types";
 import { useStudioStore } from "../store";
 import {
   useAnalyzeSitePlanPage,
@@ -51,6 +51,7 @@ export function Studio({
   const [snapshotName, setSnapshotName] = useState("");
   const [exporting, setExporting] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
+  const [analysisTone, setAnalysisTone] = useState<"info" | "warning" | "error">("info");
   const [mode, setMode] = useState<StudioMode>("edit");
   const [rightTab, setRightTab] = useState<RightPanelTab>("inspect");
 
@@ -69,12 +70,16 @@ export function Studio({
   const dirty = useStudioStore((s) => s.dirty);
   const markSaved = useStudioStore((s) => s.markSaved);
   const removeAnnotation = useStudioStore((s) => s.removeAnnotation);
-  const importSuggestionLayer = useStudioStore((s) => s.importSuggestionLayer);
+  const stageSuggestionLayer = useStudioStore((s) => s.stageSuggestionLayer);
+  const reviewSuggestionCount = useStudioStore(
+    (s) => s.reviewSuggestions?.annotations.length ?? 0,
+  );
   const workingAnnotations = useStudioStore((s) => s.annotations);
   const workingLayers = useStudioStore((s) => s.layers);
 
   const page = plan?.pages[pageIndex];
   const spaces = property?.spaces ?? [];
+  const occupancies: OccupancyRecord[] = property?.occupancies ?? [];
 
   // Load page state into the store when the page changes (not on every save refetch).
   const loadedPageRef = useRef<string | null>(null);
@@ -84,6 +89,13 @@ export function Studio({
       loadPage(page);
     }
   }, [page, loadPage]);
+
+  useEffect(() => {
+    if (reviewSuggestionCount === 0 && mode === "review") {
+      setMode("edit");
+      setRightTab("inspect");
+    }
+  }, [mode, reviewSuggestionCount]);
 
   // Debounced batch save of the working state.
   useEffect(() => {
@@ -147,22 +159,28 @@ export function Studio({
   const analyzeCurrentPage = useCallback(() => {
     if (!page) return;
     setAnalysisMessage(null);
+    setAnalysisTone("info");
     analyzePage.mutate(page.id, {
       onSuccess: (result) => {
-        importSuggestionLayer(result.annotations);
+        stageSuggestionLayer(result.annotations);
         const count = result.annotations.annotations.length;
         const note = result.notes[0] ? ` ${result.notes[0]}` : "";
+        const fallback = result.provider === "fallback-layout";
         setMode("review");
         setRightTab("layers");
+        setAnalysisTone(fallback ? "warning" : "info");
         setAnalysisMessage(
-          `Imported ${count} AI suggestion${count === 1 ? "" : "s"} from ${result.provider}.${note}`,
+          fallback
+            ? `AI vision is not configured; generated ${count} placeholder suggestion${count === 1 ? "" : "s"} for review.${note}`
+            : `Imported ${count} AI suggestion${count === 1 ? "" : "s"} from ${result.provider}. Suggestions are not saved until you accept them.${note}`,
         );
       },
       onError: (e) => {
+        setAnalysisTone("error");
         setAnalysisMessage(e instanceof Error ? e.message : "Site plan analysis failed");
       },
     });
-  }, [analyzePage, importSuggestionLayer, page]);
+  }, [analyzePage, stageSuggestionLayer, page]);
 
   // Delete key removes the selection; common tool shortcuts mirror the status bar.
   useEffect(() => {
@@ -176,11 +194,10 @@ export function Studio({
       const key = e.key.toLowerCase();
       if (key === "v") setTool("select");
       if (key === "h") setTool("pan");
-      if (key === "a") analyzeCurrentPage();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [analyzeCurrentPage, removeAnnotation, setTool]);
+  }, [removeAnnotation, setTool]);
 
   if (isLoading || !plan || !page) {
     return <Spinner label="Loading studio..." />;
@@ -199,6 +216,8 @@ export function Studio({
       analyzing={analyzePage.isPending}
       exporting={exporting}
       analysisMessage={analysisMessage}
+      analysisTone={analysisTone}
+      reviewSuggestionCount={reviewSuggestionCount}
       onAnalyze={analyzeCurrentPage}
       onVersions={() => setSnapshotsOpen(true)}
       onExport={() => void exportFlattened()}
@@ -206,8 +225,6 @@ export function Studio({
         <ToolRail
           activeToolId={activeToolId}
           onToolChange={setTool}
-          onAnalyze={analyzeCurrentPage}
-          analyzing={analyzePage.isPending}
         />
       }
       leftPanel={
@@ -215,8 +232,6 @@ export function Studio({
           plan={plan}
           activeIndex={pageIndex}
           onPageChange={setPageIndex}
-          onAnalyze={analyzeCurrentPage}
-          analyzing={analyzePage.isPending}
         />
       }
       canvas={
@@ -239,7 +254,11 @@ export function Studio({
             />
           ) : rightTab === "inspect" ? (
             <div className="min-h-0 overflow-y-auto p-4">
-              <InspectorPanel propertyId={propertyId} spaces={spaces} />
+              <InspectorPanel
+                propertyId={propertyId}
+                spaces={spaces}
+                occupancies={occupancies}
+              />
             </div>
           ) : rightTab === "layers" ? (
             <StudioPanel

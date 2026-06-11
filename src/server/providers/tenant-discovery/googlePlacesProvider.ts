@@ -15,6 +15,7 @@ const FIELD_MASK = [
   "places.id",
   "places.displayName",
   "places.formattedAddress",
+  "places.addressComponents",
   "places.location",
   "places.types",
   "places.primaryType",
@@ -28,6 +29,7 @@ const PLACE_DETAIL_MASK = [
   "id",
   "displayName",
   "formattedAddress",
+  "addressComponents",
   "location",
   "types",
   "primaryType",
@@ -41,6 +43,11 @@ type PlaceV1 = {
   id: string;
   displayName?: { text?: string };
   formattedAddress?: string;
+  addressComponents?: {
+    longText?: string;
+    shortText?: string;
+    types?: string[];
+  }[];
   location?: { latitude: number; longitude: number };
   types?: string[];
   primaryType?: string;
@@ -55,6 +62,11 @@ function normalize(p: PlaceV1): DiscoveredPlace {
     placeId: p.id,
     name: p.displayName?.text ?? "Unknown",
     formattedAddress: p.formattedAddress,
+    addressComponents: p.addressComponents?.map((component) => ({
+      longText: component.longText ?? "",
+      shortText: component.shortText ?? "",
+      types: component.types ?? [],
+    })),
     location: p.location
       ? { lat: p.location.latitude, lng: p.location.longitude }
       : undefined,

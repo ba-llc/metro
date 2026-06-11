@@ -10,12 +10,16 @@ import {
   Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  CustomSelect,
+  type CustomSelectOption,
+} from "@/components/ui/custom-select";
 import { Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { labelize } from "@/lib/utils";
-import { uploadAsset } from "@/lib/api";
+import { assetUrl, uploadAsset } from "@/lib/api";
 import type { AnnotationData } from "@/types/annotations";
-import type { SpaceRecord } from "@/features/properties/types";
+import type { OccupancyRecord, SpaceRecord } from "@/features/properties/types";
 import { useCreateSpace } from "@/features/properties/hooks";
 import { spaceBindableTypes, textAnnotationTypes } from "../tools";
 import { useStudioStore } from "../store";
@@ -23,9 +27,11 @@ import { useStudioStore } from "../store";
 export function InspectorPanel({
   propertyId,
   spaces,
+  occupancies,
 }: {
   propertyId: string;
   spaces: SpaceRecord[];
+  occupancies: OccupancyRecord[];
 }) {
   const annotations = useStudioStore((s) => s.annotations);
   const selectedId = useStudioStore((s) => s.selectedId);
@@ -73,6 +79,40 @@ export function InspectorPanel({
   const isText = textAnnotationTypes.includes(selected.type);
   const isBindable = spaceBindableTypes.includes(selected.type);
   const boundSpace = spaces.find((s) => s.id === selected.spaceId);
+  const rosterLogoOptions = occupancies
+    .filter((occupancy) => occupancy.tenant.logoAssetId)
+    .map((occupancy) => {
+      const suite = occupancy.suiteNumber
+        ? `Suite ${occupancy.suiteNumber}`
+        : null;
+      return {
+        value: occupancy.id,
+        label: suite ? `${occupancy.tenant.name} - ${suite}` : occupancy.tenant.name,
+        tenantName: occupancy.tenant.name,
+        suiteNumber: occupancy.suiteNumber,
+        logoAssetId: occupancy.tenant.logoAssetId as string,
+      };
+    });
+  const selectedRosterLogo = rosterLogoOptions.find(
+    (option) => option.logoAssetId === selected.assetId,
+  );
+  const noRosterLogoValue = "__none";
+  const customLogoValue = "__custom";
+  const rosterLogoSelectOptions: Array<CustomSelectOption<string>> = [
+    { value: noRosterLogoValue, label: "No roster logo selected" },
+    ...rosterLogoOptions,
+    ...(selected.assetId && !selectedRosterLogo
+      ? [{ value: customLogoValue, label: "Custom uploaded logo", disabled: true }]
+      : []),
+  ];
+  const rosterLogoValue = selectedRosterLogo
+    ? selectedRosterLogo.value
+    : selected.assetId
+      ? customLogoValue
+      : noRosterLogoValue;
+  const rosterLogoByValue = new Map(
+    rosterLogoOptions.map((option) => [option.value, option]),
+  );
 
   function patchStyle(patch: Partial<AnnotationData["style"]>) {
     if (!selected) return;
@@ -290,27 +330,72 @@ export function InspectorPanel({
 
       {selected.type === "tenant-logo" ? (
         <InspectorSection icon={<Paintbrush className="size-4" />} title="Logo Image">
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            disabled={uploadingLogo}
-            className="block w-full text-xs text-slate-500"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              setUploadingLogo(true);
-              try {
-                const asset = await uploadAsset({
-                  file,
-                  filename: file.name,
-                  folder: `properties/${propertyId}/logos`,
+          {rosterLogoOptions.length > 0 ? (
+            <CustomSelect
+              label="Choose from tenant roster"
+              value={rosterLogoValue}
+              options={rosterLogoSelectOptions}
+              onValueChange={(value) => {
+                const rosterLogo = rosterLogoByValue.get(value);
+                updateAnnotation(selected.id, {
+                  assetId: rosterLogo?.logoAssetId ?? null,
                 });
-                updateAnnotation(selected.id, { assetId: asset.id });
-              } finally {
-                setUploadingLogo(false);
+              }}
+              triggerClassName="h-12"
+              renderValue={(option) =>
+                option ? (
+                  <RosterLogoSelectRow
+                    label={option.label}
+                    logoAssetId={rosterLogoByValue.get(option.value)?.logoAssetId}
+                  />
+                ) : null
               }
-            }}
-          />
+              renderOption={(option) => (
+                <RosterLogoSelectRow
+                  label={option.label}
+                  logoAssetId={rosterLogoByValue.get(option.value)?.logoAssetId}
+                />
+              )}
+            />
+          ) : (
+            <p className="text-sm text-slate-500">
+              No Tenant Roster logos are available yet. Add or approve tenant logos
+              from the Tenant Roster, or upload a logo below.
+            </p>
+          )}
+          {selected.assetId ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={assetUrl(selected.assetId)}
+                alt="Selected tenant logo"
+                className="max-h-16 max-w-full object-contain"
+              />
+            </div>
+          ) : null}
+          <Field label="Upload custom logo">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={uploadingLogo}
+              className="block w-full text-xs text-slate-500"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploadingLogo(true);
+                try {
+                  const asset = await uploadAsset({
+                    file,
+                    filename: file.name,
+                    folder: `properties/${propertyId}/logos`,
+                  });
+                  updateAnnotation(selected.id, { assetId: asset.id });
+                } finally {
+                  setUploadingLogo(false);
+                }
+              }}
+            />
+          </Field>
         </InspectorSection>
       ) : null}
 
@@ -397,6 +482,30 @@ export function InspectorPanel({
         </InspectorSection>
       ) : null}
     </div>
+  );
+}
+
+function RosterLogoSelectRow({
+  label,
+  logoAssetId,
+}: {
+  label: string;
+  logoAssetId?: string;
+}) {
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      {logoAssetId ? (
+        <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 bg-white">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={assetUrl(logoAssetId)}
+            alt=""
+            className="max-h-7 max-w-7 object-contain"
+          />
+        </span>
+      ) : null}
+      <span className="min-w-0 truncate">{label}</span>
+    </span>
   );
 }
 

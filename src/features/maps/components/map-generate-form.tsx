@@ -1,9 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
 import { Button } from "@/components/ui/button";
+import {
+  CustomSelect,
+  type CustomSelectOption,
+} from "@/components/ui/custom-select";
 import { Field } from "@/components/ui/field";
-import { Input, Select } from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/empty-state";
 import {
   defaultMapParams,
@@ -37,6 +48,46 @@ type Props = {
 const usesAutoZoom = (kind: MapCreateInput["kind"]) =>
   kind === "RADIUS" || kind === "RETAIL";
 
+const defaultConfigWidth = 600;
+const minConfigWidth = 360;
+const minPreviewWidth = 280;
+const resizeGutterWidth = 16;
+const resizeKeyboardStep = 24;
+
+const mapKindOptions: readonly CustomSelectOption<MapCreateInput["kind"]>[] =
+  mapKinds.map((value) => ({
+    value,
+    label:
+      value === "SATELLITE_AERIAL"
+        ? "Satellite aerial"
+        : value === "TRADE_AREA"
+          ? "Trade area"
+          : value === "RADIUS"
+            ? "Radius rings"
+            : "Retail POI",
+  }));
+
+const mapSizeSelectOptions: readonly CustomSelectOption<string>[] =
+  mapSizePresets.map((preset) => ({
+    value: preset.id,
+    label: preset.label,
+  }));
+
+const scaleOptions: readonly CustomSelectOption<"1" | "2">[] = [
+  { value: "1", label: "Standard (1x)" },
+  { value: "2", label: "High resolution (2x, recommended)" },
+];
+
+const markerColorSelectOptions: readonly CustomSelectOption<string>[] =
+  markerColorOptions.map((value) => ({
+    value,
+    label: value,
+  }));
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 export function MapGenerateForm({
   propertyId,
   loading,
@@ -65,6 +116,8 @@ export function MapGenerateForm({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [configWidth, setConfigWidth] = useState(defaultConfigWidth);
+  const layoutRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!initialInput) return;
@@ -158,68 +211,123 @@ export function MapGenerateForm({
     [previewUrl],
   );
 
+  useEffect(() => {
+    const layout = layoutRef.current;
+    if (!layout) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      setConfigWidth((current) =>
+        clamp(
+          current,
+          minConfigWidth,
+          Math.max(
+            minConfigWidth,
+            layout.clientWidth - resizeGutterWidth - minPreviewWidth,
+          ),
+        ),
+      );
+    });
+
+    resizeObserver.observe(layout);
+    return () => resizeObserver.disconnect();
+  }, []);
+
   function handleSubmit() {
     onSubmit(buildInput());
   }
 
   const showManualZoom = !usesAutoZoom(kind) || params.autoZoom === false;
+  const maxConfigWidth =
+    layoutRef.current?.clientWidth != null
+      ? Math.max(
+          minConfigWidth,
+          layoutRef.current.clientWidth - resizeGutterWidth - minPreviewWidth,
+        )
+      : defaultConfigWidth;
+
+  function setClampedConfigWidth(nextWidth: number) {
+    setConfigWidth(clamp(nextWidth, minConfigWidth, maxConfigWidth));
+  }
+
+  function startResize(startX: number) {
+    const startConfigWidth = configWidth;
+    const containerWidth = layoutRef.current?.clientWidth ?? 0;
+    const maxWidth = Math.max(
+      minConfigWidth,
+      containerWidth - resizeGutterWidth - minPreviewWidth,
+    );
+
+    const onMove = (event: PointerEvent) => {
+      setConfigWidth(
+        clamp(
+          startConfigWidth + event.clientX - startX,
+          minConfigWidth,
+          maxWidth,
+        ),
+      );
+    };
+
+    const onUp = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  function handleResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setClampedConfigWidth(configWidth - resizeKeyboardStep);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setClampedConfigWidth(configWidth + resizeKeyboardStep);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setClampedConfigWidth(minConfigWidth);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setClampedConfigWidth(maxConfigWidth);
+    }
+  }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
+    <div
+      ref={layoutRef}
+      className="grid gap-6 lg:grid-cols-[minmax(0,var(--map-config-width))_16px_minmax(280px,1fr)] lg:gap-0"
+      style={
+        {
+          "--map-config-width": `${configWidth}px`,
+        } as CSSProperties
+      }
+    >
       <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
-        <Field label="Map type">
-          <Select
-            value={kind}
-            onChange={(e) =>
-              changeKind(e.target.value as MapCreateInput["kind"])
-            }
-          >
-            {mapKinds.map((k) => (
-              <option key={k} value={k}>
-                {k === "SATELLITE_AERIAL"
-                  ? "Satellite aerial"
-                  : k === "TRADE_AREA"
-                    ? "Trade area"
-                    : k === "RADIUS"
-                      ? "Radius rings"
-                      : "Retail POI"}
-              </option>
-            ))}
-          </Select>
-        </Field>
+        <CustomSelect
+          label="Map type"
+          value={kind}
+          options={mapKindOptions}
+          onValueChange={changeKind}
+        />
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Base map style">
-            <Select
-              value={
-                params.mapType ?? defaultMapParams(kind).mapType ?? "roadmap"
-              }
-              onChange={(e) =>
-                patch({
-                  mapType: e.target.value as NonNullable<MapParams["mapType"]>,
-                })
-              }
-            >
-              {mapTypeOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <CustomSelect
+            label="Base map style"
+            value={params.mapType ?? defaultMapParams(kind).mapType ?? "roadmap"}
+            options={mapTypeOptions}
+            onValueChange={(mapType) => patch({ mapType })}
+          />
 
-          <Field label="Output size">
-            <Select
-              value={sizePreset}
-              onChange={(e) => setSizePreset(e.target.value)}
-            >
-              {mapSizePresets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          <CustomSelect
+            label="Output size"
+            value={sizePreset}
+            options={mapSizeSelectOptions}
+            onValueChange={setSizePreset}
+          />
         </div>
 
         <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -279,17 +387,14 @@ export function MapGenerateForm({
             </Field>
           </div>
 
-          <Field label="Resolution">
-            <Select
-              value={String(params.scale ?? 2)}
-              onChange={(e) =>
-                patch({ scale: Number(e.target.value) as 1 | 2 })
-              }
-            >
-              <option value="1">Standard (1x)</option>
-              <option value="2">High resolution (2x, recommended)</option>
-            </Select>
-          </Field>
+          <CustomSelect
+            label="Resolution"
+            value={String(params.scale ?? 2) as "1" | "2"}
+            options={scaleOptions}
+            onValueChange={(scale) =>
+              patch({ scale: Number(scale) as 1 | 2 })
+            }
+          />
         </div>
 
         <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -306,18 +411,14 @@ export function MapGenerateForm({
           </label>
           {params.showPropertyMarker !== false ? (
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Pin color">
-                <Select
-                  value={params.propertyMarkerColor ?? "red"}
-                  onChange={(e) => patch({ propertyMarkerColor: e.target.value })}
-                >
-                  {markerColorOptions.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+              <CustomSelect
+                label="Pin color"
+                value={params.propertyMarkerColor ?? "red"}
+                options={markerColorSelectOptions}
+                onValueChange={(propertyMarkerColor) =>
+                  patch({ propertyMarkerColor })
+                }
+              />
               <Field label="Pin label">
                 <Input
                   maxLength={1}
@@ -426,11 +527,30 @@ export function MapGenerateForm({
         </div>
       </div>
 
-      <div className="space-y-2 lg:sticky lg:top-0 lg:self-start">
+      <div
+        role="separator"
+        aria-label="Resize map settings and live preview columns"
+        aria-orientation="vertical"
+        aria-valuemin={minConfigWidth}
+        aria-valuemax={maxConfigWidth}
+        aria-valuenow={Math.round(configWidth)}
+        tabIndex={0}
+        className="group relative mx-1 hidden cursor-col-resize bg-slate-100 transition hover:bg-brand-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 lg:block"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          startResize(event.clientX);
+        }}
+        onDoubleClick={() => setClampedConfigWidth(defaultConfigWidth)}
+        onKeyDown={handleResizeKeyDown}
+      >
+        <div className="absolute left-1/2 top-1/2 h-10 w-px -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-300 transition group-hover:bg-brand-400 group-focus:bg-brand-500" />
+      </div>
+
+      <div className="space-y-2 lg:sticky lg:top-0 lg:self-start lg:pl-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
           Live preview
         </p>
-        <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+        <div className="relative aspect-4/3 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

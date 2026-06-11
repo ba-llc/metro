@@ -14,14 +14,35 @@ export type TemplateRecord = {
   isSystem: boolean;
 };
 
-export type DocumentRecord = {
+export type DocumentShareMeta = {
   id: string;
   channel: string;
+  versionNumber: number;
   status: string;
   outputAssetId: string | null;
   error: string | null;
   createdAt: string;
   template: { name: string };
+  shareUrl: string | null;
+  downloadUrl: string | null;
+  isLatest: boolean;
+  isLiveChannel: boolean;
+};
+
+export type ChannelShareGroup = {
+  channel: string;
+  label: string;
+  canonicalShareUrl: string | null;
+  latestDocumentId: string | null;
+  isLive: boolean;
+  versions: DocumentShareMeta[];
+};
+
+export type DocumentLibraryResponse = {
+  property: { id: string; slug: string; name: string };
+  organization: { slug: string; name: string };
+  documents: DocumentShareMeta[];
+  channels: ChannelShareGroup[];
 };
 
 export function useTemplates(channel?: string) {
@@ -38,10 +59,11 @@ export function useDocuments(propertyId: string) {
   return useQuery({
     queryKey: ["documents", propertyId],
     queryFn: () =>
-      apiFetch<DocumentRecord[]>(`/api/properties/${propertyId}/documents`),
-    // Poll while any document is rendering.
+      apiFetch<DocumentLibraryResponse>(
+        `/api/properties/${propertyId}/documents`,
+      ),
     refetchInterval: (query) =>
-      query.state.data?.some(
+      query.state.data?.documents.some(
         (d) => d.status === "QUEUED" || d.status === "RENDERING",
       )
         ? 2000
@@ -53,7 +75,7 @@ export function useGenerateDocument(propertyId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (templateId: string) =>
-      apiFetch<DocumentRecord>(`/api/properties/${propertyId}/documents`, {
+      apiFetch<DocumentShareMeta>(`/api/properties/${propertyId}/documents`, {
         method: "POST",
         json: { templateId },
       }),

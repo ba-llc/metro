@@ -1,3 +1,4 @@
+import type { TemplateChannel } from "@prisma/client";
 import { db } from "@/server/db";
 import { ApiError } from "@/server/api/respond";
 import type { OrgContext } from "@/server/auth/context";
@@ -6,19 +7,205 @@ import { requireProperty } from "@/server/services/property.service";
 import { createAsset } from "@/server/services/asset.service";
 import { resolveRenderContext } from "@/server/rendering/resolve";
 import { renderDocumentHtml, renderEmailHtml } from "@/server/rendering/renderHtml";
+import { renderWebsiteHtml } from "@/server/rendering/renderWebsite";
 import type { RenderContext, RenderImages } from "@/server/rendering/types";
 import type { TemplatePage, TemplateTheme } from "@/features/marketing/schemas";
+import {
+  buildShareLinks,
+  type PublicPropertyRef,
+} from "@/server/services/publicShare.service";
+import {
+  channelSharePath,
+  isLiveChannel,
+  publicDocumentDownloadPath,
+  versionSharePath,
+} from "@/features/marketing/publicUrls";
 import { getPdfRenderer } from "@/server/providers/pdf/chromiumPdfRenderer";
 import { getStorage } from "@/server/providers/storage";
 import { enqueueJob } from "@/server/jobs/runner";
 
-export async function listDocuments(ctx: OrgContext, propertyId: string) {
-  await requireProperty(ctx, propertyId);
-  return db.generatedDocument.findMany({
+export type DocumentShareMeta = {
+  id: string;
+  channel: TemplateChannel;
+  versionNumber: number;
+  status: string;
+  outputAssetId: string | null;
+  error: string | null;
+  createdAt: Date;
+  template: { name: string };
+  shareUrl: string | null;
+  downloadUrl: string | null;
+  isLatest: boolean;
+  isLiveChannel: boolean;
+};
+
+export type DocumentLibraryResponse = {
+  property: { id: string; slug: string; name: string };
+  organization: { slug: string; name: string };
+  documents: DocumentShareMeta[];
+  channels: {
+    channel: TemplateChannel;
+    label: string;
+    canonicalShareUrl: string | null;
+    latestDocumentId: string | null;
+    isLive: boolean;
+    versions: DocumentShareMeta[];
+  }[];
+};
+
+const CHANNEL_LABELS: Record<TemplateChannel, string> = {
+  FLYER: "Leasing Flyer",
+  BROCHURE: "Brochure",
+  OM: "Offering Memorandum",
+  EMAIL: "Email Flyer",
+  SOCIAL: "Social Graphic",
+  WEBSITE: "Property Website",
+};
+
+async function nextVersionNumber(
+  propertyId: string,
+  channel: TemplateChannel,
+): Promise<number> {
+  const latest = await db.generatedDocument.findFirst({
+    where: { propertyId, channel },
+    orderBy: { versionNumber: "desc" },
+    select: { versionNumber: true },
+  });
+  return (latest?.versionNumber ?? 0) + 1;
+}
+
+function enrichDocument(
+  doc: {
+    id: string;
+    channel: TemplateChannel;
+    versionNumber: number;
+    status: string;
+    outputAssetId: string | null;
+    error: string | null;
+    createdAt: Date;
+    template: { name: string };
+  },
+  ref: PublicPropertyRef,
+  latestByChannel: Map<TemplateChannel, string>,
+): DocumentShareMeta {
+  const ready = doc.status === "READY" && doc.outputAssetId;
+  const isLatest = latestByChannel.get(doc.channel) === doc.id;
+  const live = isLiveChannel(doc.channel);
+
+  let shareUrl: string | null = null;
+  if (ready) {
+    if (live && isLatest) {
+      shareUrl = channelSharePath(ref.orgSlug, ref.propertySlug, doc.channel);
+    } else if (!live) {
+      shareUrl = versionSharePath(
+        ref.orgSlug,
+        ref.propertySlug,
+        doc.channel,
+        doc.id,
+      );
+    } else if (live) {
+      shareUrl = channelSharePath(ref.orgSlug, ref.propertySlug, doc.channel);
+    }
+  }
+
+  return {
+    ...doc,
+    shareUrl,
+    downloadUrl: ready ? publicDocumentDownloadPath(doc.id) : null,
+    isLatest,
+    isLiveChannel: live,
+  };
+}
+
+export async function listDocuments(
+  ctx: OrgContext,
+  propertyId: string,
+): Promise<DocumentLibraryResponse> {
+  const property = await db.property.findFirst({
+    where: {
+      id: propertyId,
+      organizationId: ctx.organizationId,
+      deletedAt: null,
+    },
+    include: {
+      organization: { select: { slug: true, name: true } },
+    },
+  });
+  if (!property) throw new ApiError("NOT_FOUND", "Property not found");
+
+  const docs = await db.generatedDocument.findMany({
     where: { propertyId },
     include: { template: { select: { name: true } } },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ channel: "asc" }, { versionNumber: "desc" }],
   });
+
+  const ref: PublicPropertyRef = {
+    propertyId: property.id,
+    propertySlug: property.slug,
+    propertyName: property.name,
+    orgSlug: property.organization.slug,
+    orgName: property.organization.name,
+  };
+
+  const latestByChannel = new Map<TemplateChannel, string>();
+  for (const doc of docs) {
+    if (
+      doc.status === "READY" &&
+      doc.outputAssetId &&
+      !latestByChannel.has(doc.channel)
+    ) {
+      latestByChannel.set(doc.channel, doc.id);
+    }
+  }
+
+  const enriched = docs.map((doc) =>
+    enrichDocument(doc, ref, latestByChannel),
+  );
+
+  const channelOrder: TemplateChannel[] = [
+    "WEBSITE",
+    "FLYER",
+    "BROCHURE",
+    "OM",
+    "EMAIL",
+    "SOCIAL",
+  ];
+
+  const channelsWithDocs = new Set(enriched.map((d) => d.channel));
+
+  const channels = channelOrder
+    .filter((channel) => channelsWithDocs.has(channel))
+    .map((channel) => {
+      const versions = enriched.filter(
+        (d) => d.channel === channel && d.status === "READY" && d.outputAssetId,
+      );
+      const latestId = latestByChannel.get(channel) ?? null;
+      const live = isLiveChannel(channel);
+      return {
+        channel,
+        label: CHANNEL_LABELS[channel],
+        canonicalShareUrl: latestId
+          ? channelSharePath(ref.orgSlug, ref.propertySlug, channel)
+          : null,
+        latestDocumentId: latestId,
+        isLive: live,
+        versions: live ? versions.slice(0, 1) : versions,
+      };
+    });
+
+  return {
+    property: {
+      id: property.id,
+      slug: property.slug,
+      name: property.name,
+    },
+    organization: {
+      slug: property.organization.slug,
+      name: property.organization.name,
+    },
+    documents: enriched,
+    channels,
+  };
 }
 
 export async function getDocument(ctx: OrgContext, documentId: string) {
@@ -47,11 +234,14 @@ export async function createDocument(
   });
   if (!template) throw new ApiError("NOT_FOUND", "Template not found");
 
+  const versionNumber = await nextVersionNumber(propertyId, template.channel);
+
   const doc = await db.generatedDocument.create({
     data: {
       propertyId,
       templateId: template.id,
       channel: template.channel,
+      versionNumber,
       status: "QUEUED",
     },
   });
@@ -62,7 +252,7 @@ export async function createDocument(
     entityType: "document",
     entityId: doc.id,
     action: "queued",
-    detail: { template: template.name },
+    detail: { template: template.name, versionNumber },
   });
 
   return doc;
@@ -132,13 +322,18 @@ export async function renderDocument(
       body = Buffer.from(html, "utf-8");
       mime = "text/html";
       filename = `${context.property.name} - Email Flyer.html`;
+    } else if (doc.channel === "WEBSITE") {
+      const html = renderWebsiteHtml({ theme, pages, context, images });
+      body = Buffer.from(html, "utf-8");
+      mime = "text/html";
+      filename = `${context.property.name} - Property Website.html`;
     } else {
       const html = await renderDocumentHtml({ theme, pages, context, images });
       body = await getPdfRenderer().render(html, {
         pageSize: "letter-landscape",
       });
       mime = "application/pdf";
-      filename = `${context.property.name} - ${doc.template.name}.pdf`;
+      filename = `${context.property.name} - ${doc.template.name} v${doc.versionNumber}.pdf`;
     }
 
     const asset = await createAsset(ctx, {
@@ -164,3 +359,5 @@ export async function renderDocument(
     throw e;
   }
 }
+
+export { buildShareLinks };

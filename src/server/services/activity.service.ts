@@ -32,3 +32,12 @@ export async function listActivity(ctx: OrgContext, propertyId: string) {
     take: 50,
   });
 }
+
+export async function listOrgActivity(ctx: OrgContext, take = 10) {
+  return db.activityLog.findMany({
+    where: { organizationId: ctx.organizationId },
+    include: { property: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "desc" },
+    take,
+  });
+}

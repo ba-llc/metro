@@ -2,13 +2,7 @@ import { db } from "@/server/db";
 import { hashPassword } from "@/server/auth/password";
 import { ApiError } from "@/server/api/respond";
 import type { OrgContext } from "@/server/auth/context";
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+import { slugify } from "@/lib/slugify";
 
 export async function getOrganization(ctx: OrgContext) {
   const organization = await db.organization.findFirst({

@@ -4,7 +4,7 @@ export default function PropertyStudioLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="-mx-6 -my-8 flex h-[calc(100vh)] min-h-0 flex-col overflow-hidden">
+    <div className="m-1 flex h-[calc(100vh-4.5rem)] min-h-0 flex-col overflow-hidden rounded-xl">
       {children}
     </div>
   );

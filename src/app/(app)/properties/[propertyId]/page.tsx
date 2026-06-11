@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { StatusBadge } from "@/components/ui/badge";
+import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/empty-state";
 import { formatSF, labelize } from "@/lib/utils";
 import { PropertyNav } from "@/features/properties/components/property-nav";
@@ -54,15 +54,22 @@ export default function PropertyWorkspacePage({
           </span>
         }
         subtitle={
-          <>
-            {address} • {labelize(property.propertyType)}
-            {property.totalGla ? ` • ${formatSF(property.totalGla)}` : ""}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-sm font-medium text-slate-600">{address}</span>
+            <Badge tone="slate" className="bg-white">
+              {labelize(property.propertyType)}
+            </Badge>
+            {property.totalGla ? (
+              <span className="text-xs font-semibold text-slate-500">
+                {formatSF(property.totalGla)}
+              </span>
+            ) : null}
             {property.latitude != null ? (
-              <span className="ml-2 text-emerald-600">Geocoded</span>
+              <Badge tone="green">Geocoded</Badge>
             ) : (
-              <span className="ml-2 text-amber-600">Not geocoded</span>
+              <Badge tone="amber">Not geocoded</Badge>
             )}
-          </>
+          </div>
         }
         actions={
           <>
@@ -75,11 +82,12 @@ export default function PropertyWorkspacePage({
                 Geocode Address
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={() => setEditOpen(true)}>
+            <Button variant="secondary" className="w-20" onClick={() => setEditOpen(true)}>
               Edit
             </Button>
             <Button
               variant="danger"
+              className="w-20"
               loading={deleteProperty.isPending}
               onClick={() => {
                 if (confirm("Delete this property? Marketing assets will be removed.")) {
@@ -130,6 +138,7 @@ export default function PropertyWorkspacePage({
         <PropertyForm
           submitLabel="Save Changes"
           submitting={updateProperty.isPending}
+          enablePlaceSearch={false}
           defaultValues={{
             name: property.name,
             propertyType: property.propertyType as PropertyCreateInput["propertyType"],

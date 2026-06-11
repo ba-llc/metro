@@ -10,11 +10,18 @@
 
 export type LatLng = { lat: number; lng: number };
 
+export type AddressComponent = {
+  longText: string;
+  shortText: string;
+  types: string[];
+};
+
 export type DiscoveredPlace = {
   /** Stable provider place id, e.g. Google Places place_id. */
   placeId: string;
   name: string;
   formattedAddress?: string;
+  addressComponents?: AddressComponent[];
   location?: LatLng;
   /** Provider-specific types/categories, raw. */
   types: string[];

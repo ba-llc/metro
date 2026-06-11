@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState, Spinner } from "@/components/ui/empty-state";
 import { Modal } from "@/components/ui/modal";
-import { formatSF, labelize } from "@/lib/utils";
+import { labelize } from "@/lib/utils";
 import { PropertyForm } from "@/features/properties/components/property-form";
+import { PropertyCard } from "@/features/properties/components/property-card";
 import {
   useCreateProperty,
   usePropertyList,
@@ -18,9 +17,20 @@ import {
 import { propertyTypes } from "@/features/properties/schemas";
 
 export default function PropertiesPage() {
+  return (
+    <Suspense fallback={<Spinner label="Loading properties..." />}>
+      <PropertiesPageInner />
+    </Suspense>
+  );
+}
+
+function PropertiesPageInner() {
+  const searchParams = useSearchParams();
   const [q, setQ] = useState("");
   const [propertyType, setPropertyType] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(
+    searchParams.get("new") === "1",
+  );
   const { data: properties, isLoading } = usePropertyList({ q, propertyType });
   const createProperty = useCreateProperty();
 
@@ -68,30 +78,7 @@ export default function PropertiesPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {properties.map((p) => (
-            <Link key={p.id} href={`/properties/${p.id}`}>
-              <Card className="h-full transition-shadow hover:shadow-md">
-                <CardContent>
-                  <div className="mb-2 flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-slate-900">{p.name}</h3>
-                    <StatusBadge status={p.status} />
-                  </div>
-                  <p className="text-sm text-slate-500">
-                    {p.address
-                      ? `${p.address.street}, ${p.address.city}, ${p.address.state}`
-                      : "No address"}
-                  </p>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">
-                    {labelize(p.propertyType)}
-                    {p.totalGla ? ` • ${formatSF(p.totalGla)}` : ""}
-                  </p>
-                  <div className="mt-4 flex gap-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                    <span>{p._count.spaces} spaces</span>
-                    <span>{p._count.sitePlans} site plans</span>
-                    <span>{p._count.documents} documents</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+            <PropertyCard key={p.id} property={p} />
           ))}
         </div>
       )}

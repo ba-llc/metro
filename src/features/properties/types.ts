@@ -18,6 +18,7 @@ export type PropertyListItem = {
   longitude: number | null;
   updatedAt: string;
   address: AddressRecord | null;
+  photos: { assetId: string }[];
   _count: { spaces: number; sitePlans: number; documents: number };
 };
 
@@ -60,6 +61,11 @@ export type DiscoveredPlaceRecord = {
   placeId: string;
   name: string;
   formattedAddress?: string;
+  addressComponents?: {
+    longText: string;
+    shortText: string;
+    types: string[];
+  }[];
   location?: { lat: number; lng: number };
   types: string[];
   primaryType?: string;

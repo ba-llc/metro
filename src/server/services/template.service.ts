@@ -45,6 +45,19 @@ export const systemTemplates: {
     theme: metroCommercialTheme,
     pages: [{ block: "cover" }],
   },
+  {
+    name: "Metro Commercial Property Website",
+    channel: "WEBSITE",
+    theme: metroCommercialTheme,
+    pages: [
+      { block: "cover" },
+      { block: "aerial", title: "Location" },
+      { block: "site-plan", title: "Availability" },
+      { block: "demographics", title: "Demographics" },
+      { block: "tenant-roster", title: "Tenants" },
+      { block: "contacts", title: "Contact" },
+    ],
+  },
 ];
 
 function themeIsEmpty(theme: unknown): boolean {

@@ -19,10 +19,10 @@ type Props = {
 };
 
 const RADIUS_PRESETS = [
-  { label: "250m", value: 250 },
-  { label: "500m", value: 500 },
-  { label: "1km", value: 1000 },
-  { label: "2km", value: 2000 },
+  { label: "0.25 mi", value: 402 },
+  { label: "0.5 mi", value: 805 },
+  { label: "1 mi", value: 1609 },
+  { label: "2 mi", value: 3219 },
 ];
 
 function faviconPreviewUrl(website?: string) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
   LocateFixed,
@@ -44,11 +44,13 @@ export function StudioCanvas({
 
   const layers = useStudioStore((s) => s.layers);
   const annotations = useStudioStore((s) => s.annotations);
+  const reviewSuggestions = useStudioStore((s) => s.reviewSuggestions);
   const selectedId = useStudioStore((s) => s.selectedId);
   const activeToolId = useStudioStore((s) => s.activeToolId);
   const select = useStudioStore((s) => s.select);
   const addAnnotation = useStudioStore((s) => s.addAnnotation);
   const updateAnnotation = useStudioStore((s) => s.updateAnnotation);
+  const updateSuggestionAnnotation = useStudioStore((s) => s.updateSuggestionAnnotation);
 
   const background = useHtmlImage(assetUrl(page.imageAssetId));
 
@@ -62,6 +64,22 @@ export function StudioCanvas({
   const tool = getTool(activeToolId);
   const panMode = activeToolId === "pan" || spacePan;
   const scale = zoom;
+  const reviewLayers = useMemo(
+    () => reviewSuggestions?.layers ?? [],
+    [reviewSuggestions],
+  );
+  const reviewAnnotations = useMemo(
+    () => reviewSuggestions?.annotations ?? [],
+    [reviewSuggestions],
+  );
+  const reviewAnnotationIds = useMemo(
+    () => new Set(reviewAnnotations.map((a) => a.id)),
+    [reviewAnnotations],
+  );
+  const allAnnotations = useMemo(
+    () => [...annotations, ...reviewAnnotations],
+    [annotations, reviewAnnotations],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -96,7 +114,7 @@ export function StudioCanvas({
     const transformer = transformerRef.current;
     const stage = stageRef.current;
     if (!transformer || !stage) return;
-    const selected = annotations.find((a) => a.id === selectedId);
+    const selected = allAnnotations.find((a) => a.id === selectedId);
     const isRect =
       selected &&
       (selected.type === "rectangle" ||
@@ -110,7 +128,7 @@ export function StudioCanvas({
       transformer.nodes([]);
     }
     transformer.getLayer()?.batchDraw();
-  }, [selectedId, annotations, stageRef]);
+  }, [selectedId, allAnnotations, stageRef]);
 
   function pointerPagePos(): Point | null {
     const stage = stageRef.current;
@@ -302,6 +320,7 @@ export function StudioCanvas({
   }
 
   const sortedLayers = [...layers].sort((a, b) => a.sortOrder - b.sortOrder);
+  const sortedReviewLayers = [...reviewLayers].sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
     <div
@@ -362,6 +381,32 @@ export function StudioCanvas({
           ) : null,
         )}
 
+        {sortedReviewLayers.map((layer) =>
+          layer.visible ? (
+            <Layer key={layer.id} listening={!layer.locked && tool.mode === "select"}>
+              {reviewAnnotations
+                .filter((a) => a.layerId === layer.id)
+                .sort((a, b) => a.zIndex - b.zIndex)
+                .map((a) => (
+                  <AnnotationNode
+                    key={a.id}
+                    annotation={a}
+                    pageW={pageW}
+                    pageH={pageH}
+                    interactive={!layer.locked && tool.mode === "select"}
+                    resolveLabel={resolveLabel}
+                    onSelect={() => select(a.id)}
+                    onChange={(patch) =>
+                      reviewAnnotationIds.has(a.id)
+                        ? updateSuggestionAnnotation(a.id, patch)
+                        : updateAnnotation(a.id, patch)
+                    }
+                  />
+                ))}
+            </Layer>
+          ) : null,
+        )}
+
         {/* Draft overlay while drawing. */}
         <Layer listening={false}>
           {draftStart && draftCurrent && tool.mode === "drag-rect" ? (
@@ -411,7 +456,7 @@ export function StudioCanvas({
       </Stage>
 
       <div className="absolute left-4 top-4 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-medium text-slate-600 shadow-lg backdrop-blur">
-        {mode === "review" ? "AI Review" : mode === "preview" ? "Preview" : "Edit"} / {Math.round(zoom * 100)}%
+        {mode === "review" ? "AI Review" : "Edit"} / {Math.round(zoom * 100)}%
       </div>
 
       <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 p-2 shadow-lg backdrop-blur">

@@ -6,11 +6,12 @@ type Size = "sm" | "md";
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-brand-900 text-white hover:bg-brand-800 disabled:bg-slate-300 disabled:text-slate-500",
+    "border-brand-900 bg-brand-900 text-white hover:border-brand-800 hover:bg-brand-800 disabled:border-slate-300 disabled:bg-slate-300 disabled:text-slate-500",
   secondary:
-    "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:text-slate-400",
-  ghost: "text-slate-600 hover:bg-slate-100 disabled:text-slate-400",
-  danger: "bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300",
+    "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:text-slate-400",
+  ghost: "border-transparent text-slate-600 hover:bg-slate-100 disabled:text-slate-400",
+  danger:
+    "border-red-600 bg-red-600 text-white hover:border-red-700 hover:bg-red-700 disabled:border-slate-300 disabled:bg-slate-300",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -34,7 +35,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors cursor-pointer disabled:cursor-not-allowed",
+          "inline-flex items-center justify-center gap-2 rounded-md border font-medium transition-colors cursor-pointer disabled:cursor-not-allowed",
           variantClasses[variant],
           sizeClasses[size],
           className,

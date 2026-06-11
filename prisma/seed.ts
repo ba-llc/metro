@@ -58,6 +58,7 @@ async function main() {
     data: {
       organizationId: org.id,
       name: "Lawrence Park Shopping Center",
+      slug: "lawrence-park-shopping-center",
       propertyType: "SHOPPING_CENTER",
       status: "ACTIVE",
       description:
