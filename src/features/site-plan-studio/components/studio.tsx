@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import type Konva from "konva";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ import {
 import { SymbolAssetsPanel } from "./symbol-assets-panel";
 import { InsertAssetsPanel } from "./insert-assets-panel";
 import { MapAssetsPanel } from "./map-assets-panel";
+import { PlanSwitcher } from "./plan-switcher";
 
 const SAVE_DEBOUNCE_MS = 1200;
 
@@ -57,6 +59,7 @@ export function Studio({
   propertyId: string;
   sitePlanId: string;
 }) {
+  const router = useRouter();
   const stageRef = useRef<Konva.Stage | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
@@ -335,6 +338,20 @@ export function Studio({
     });
   }
 
+  /** Flush any pending annotation edits, then navigate to another plan's studio. */
+  async function switchPlan(nextPlanId: string) {
+    if (nextPlanId === sitePlanId) return;
+    if (dirty && page && reviewSuggestionCount === 0 && mode !== "review") {
+      const { layers, annotations } = useStudioStore.getState();
+      await saveAnnotations.mutateAsync({
+        pageId: page.id,
+        payload: { layers, annotations },
+      });
+      markSaved();
+    }
+    router.push(`/properties/${propertyId}/studio/${nextPlanId}`);
+  }
+
   function handleToolChange(toolId: string) {
     setLibraryPanel(null);
     setTool(toolId);
@@ -426,6 +443,14 @@ export function Studio({
     <StudioShell
       propertyId={propertyId}
       plan={plan}
+      planSwitcher={
+        <PlanSwitcher
+          propertyId={propertyId}
+          sitePlanId={sitePlanId}
+          currentTitle={plan.title}
+          onSwitch={(planId) => void switchPlan(planId)}
+        />
+      }
       pageIndex={pageIndex}
       dirty={dirty}
       saving={saveAnnotations.isPending}

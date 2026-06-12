@@ -28,6 +28,7 @@ export type RightPanelTab = "inspect" | "layers" | "data";
 type ShellProps = {
   propertyId: string;
   plan: SitePlanDetail;
+  planSwitcher?: ReactNode;
   pageIndex: number;
   dirty: boolean;
   saving: boolean;
@@ -56,6 +57,7 @@ type ShellProps = {
 export function StudioShell({
   propertyId,
   plan,
+  planSwitcher,
   pageIndex,
   dirty,
   saving,
@@ -85,18 +87,20 @@ export function StudioShell({
       <header className="grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-slate-200 bg-white/95 px-4 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
           <Link
-            href={`/properties/${propertyId}/site-plans`}
+            href={`/properties/${propertyId}`}
             className="inline-flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-brand-200 hover:text-brand-900"
-            aria-label="Back to site plan library"
-            title="Back to site plan library"
+            aria-label="Back to property"
+            title="Back to property"
           >
             <ArrowLeft className="size-4" />
           </Link>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-sm font-semibold text-slate-950">
-                {plan.title}
-              </p>
+              {planSwitcher ?? (
+                <p className="truncate text-sm font-semibold text-slate-950">
+                  {plan.title}
+                </p>
+              )}
               <SaveState dirty={dirty} saving={saving} />
               {reviewSuggestionCount > 0 ? (
                 <ReviewState count={reviewSuggestionCount} />

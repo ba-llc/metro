@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useRef, useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/badge";
@@ -52,7 +51,7 @@ export default function SitePlansPage({
     <PropertyWorkspaceShell propertyId={propertyId}>
       <PropertyTabSection
         title="Site Plans"
-        subtitle="Property document library — store originals here and open Site Plan Studio to annotate."
+        subtitle="Property document library — uploaded originals. Annotate them from the Studio tab."
         actions={
           <Button
             loading={upload.isPending}
@@ -83,7 +82,7 @@ export default function SitePlansPage({
       ) : !sitePlans || sitePlans.length === 0 ? (
         <EmptyState
           title="No site plans yet"
-          description="Upload engineering site plan PDFs to the property library. When a plan is ready, open it in Site Plan Studio to annotate spaces."
+          description="Upload engineering site plan PDFs to the property library. When a plan is ready, annotate it from the Studio tab."
           action={
             <Button
               loading={upload.isPending}
@@ -117,22 +116,6 @@ export default function SitePlansPage({
                 </div>
 
                 <div className="mt-5 flex items-center gap-2 border-t border-slate-100 pt-4">
-                  {plan.status === "READY" ? (
-                    <Link href={`/properties/${propertyId}/studio/${plan.id}`}>
-                      <Button size="sm" variant="secondary">
-                        Edit in Studio
-                      </Button>
-                    </Link>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled
-                      title="Site Plan Studio is available once processing completes."
-                    >
-                      Edit in Studio
-                    </Button>
-                  )}
                   <Button
                     size="sm"
                     variant="ghost"

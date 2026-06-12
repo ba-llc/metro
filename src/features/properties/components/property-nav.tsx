@@ -8,6 +8,7 @@ const tabs = [
   { label: "Overview", segment: "" },
   { label: "Site Plans", segment: "site-plans" },
   { label: "Maps", segment: "maps" },
+  { label: "Studio", segment: "studio" },
   { label: "Marketing", segment: "marketing" },
 ];
 

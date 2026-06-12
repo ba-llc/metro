@@ -8,6 +8,12 @@ import {
   type StaticMapPath,
 } from "@/server/providers/maps";
 import { circlePoints, milesToMeters, offsetCenter, zoomForRadiusMiles } from "@/lib/geo";
+import {
+  getLabelFont,
+  svgTextBaseline,
+  svgTextPath,
+  svgTextWidth,
+} from "@/server/rendering/svgText";
 import type { MapParams } from "@/features/maps/schemas";
 
 const RING_COLORS: readonly [string, ...string[]] = [
@@ -25,7 +31,6 @@ const MARKER_COLOR_CSS: Record<string, string> = {
 };
 const PLACE_NAME_MAX_LENGTH = 22;
 const STATIC_MAP_TILE_SIZE = 256;
-const RADIUS_LABEL_BEARING_DEGREES = 45;
 
 export type MapRenderParams = MapParams & {
   center: { lat: number; lng: number };
@@ -59,6 +64,10 @@ function formatRadiusLabel(radiusMiles: number): string {
   return `${value} mi`;
 }
 
+// ~2 o'clock — keeps labels clear of the property pin, which extends above center.
+const RADIUS_LABEL_BEARING_DEGREES = 60;
+
+/** Point on the ring at the label bearing (circlePoints starts at bearing 0 = north). */
 function ringLabelPoint(points: LatLng[]): LatLng | null {
   if (points.length === 0) return null;
   const closedRingSegments = Math.max(points.length - 1, 1);
@@ -120,91 +129,8 @@ function truncatePlaceName(name: string): string {
   return `${trimmed.slice(0, PLACE_NAME_MAX_LENGTH)}…`;
 }
 
-function escapeSvgText(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function textBaselineY(y: number, paddingY: number, fontSize: number) {
-  return y + paddingY + fontSize * 0.82;
-}
-
-const DIGIT_SEGMENTS: Record<string, string[]> = {
-  "0": ["a", "b", "c", "d", "e", "f"],
-  "1": ["b", "c"],
-  "2": ["a", "b", "g", "e", "d"],
-  "3": ["a", "b", "g", "c", "d"],
-  "4": ["f", "g", "b", "c"],
-  "5": ["a", "f", "g", "c", "d"],
-  "6": ["a", "f", "g", "e", "c", "d"],
-  "7": ["a", "b", "c"],
-  "8": ["a", "b", "c", "d", "e", "f", "g"],
-  "9": ["a", "b", "c", "d", "f", "g"],
-};
-
-const SEGMENT_PATHS: Record<string, string> = {
-  a: "M1.2 0.8 H4.8",
-  b: "M5.2 1.2 V4.4",
-  c: "M5.2 5.6 V8.8",
-  d: "M1.2 9.2 H4.8",
-  e: "M0.8 5.6 V8.8",
-  f: "M0.8 1.2 V4.4",
-  g: "M1.2 5 H4.8",
-};
-
-function vectorGlyphAdvance(char: string) {
-  if (char === " ") return 3;
-  if (char === ".") return 2.4;
-  if (char === "i") return 2.4;
-  if (char === "m") return 8.2;
-  return 6.4;
-}
-
-function vectorTextWidth(text: string, fontSize: number) {
-  const units = [...text].reduce(
-    (sum, char) => sum + vectorGlyphAdvance(char),
-    0,
-  );
-  return (units * fontSize) / 10;
-}
-
-function vectorTextSvg(text: string, x: number, y: number, fontSize: number) {
-  const scale = fontSize / 10;
-  let cursor = 0;
-  const glyphs = [...text].flatMap((char) => {
-    const advance = vectorGlyphAdvance(char);
-    const tx = x + cursor * scale;
-    cursor += advance;
-
-    if (char === " ") return [];
-    if (char === ".") {
-      return [
-        `<circle cx="${(tx + 1.1 * scale).toFixed(1)}" cy="${(y + 8.9 * scale).toFixed(1)}" r="${(0.65 * scale).toFixed(1)}" fill="#0f172a" />`,
-      ];
-    }
-    if (char === "i") {
-      return [
-        `<circle cx="${(tx + 1.1 * scale).toFixed(1)}" cy="${(y + 2 * scale).toFixed(1)}" r="${(0.55 * scale).toFixed(1)}" fill="#0f172a" />`,
-        `<path d="M1.1 4 V9" transform="translate(${tx.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" fill="none" stroke="#0f172a" stroke-width="1.35" stroke-linecap="round" />`,
-      ];
-    }
-    if (char === "m") {
-      return [
-        `<path d="M0.8 9 V4.4 C0.8 3.6 1.4 3.2 2.1 3.2 C2.8 3.2 3.3 3.7 3.3 4.6 V9 M3.3 4.7 C3.4 3.7 4 3.2 4.8 3.2 C5.7 3.2 6.2 3.8 6.2 4.8 V9" transform="translate(${tx.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" fill="none" stroke="#0f172a" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />`,
-      ];
-    }
-
-    const segments = DIGIT_SEGMENTS[char];
-    if (!segments) return [];
-    return [
-      `<path d="${segments.map((segment) => SEGMENT_PATHS[segment]).join(" ")}" transform="translate(${tx.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(3)})" fill="none" stroke="#0f172a" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" />`,
-    ];
-  });
-
-  return glyphs.join("\n");
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 async function addRadiusLabels(
@@ -217,40 +143,64 @@ async function addRadiusLabels(
   scale: 1 | 2,
 ): Promise<Buffer> {
   if (labels.length === 0) return body;
+  const font = await getLabelFont();
 
   const outputWidth = width * scale;
   const outputHeight = height * scale;
   const fontSize = 13 * scale;
-  const paddingX = 6 * scale;
-  const paddingY = 4 * scale;
+  const paddingX = 9 * scale;
+  const boxHeight = 22 * scale;
   const margin = 8 * scale;
-  const gap = 6 * scale;
-  const borderRadius = 5 * scale;
+  const minGap = 4 * scale;
 
-  const elements = labels.map((label) => {
+  // Pills sit centered on each ring's label-bearing point; the ring line
+  // passing behind the pill ties the label to its ring without leader lines.
+  const boxes = labels.map((label) => {
     const anchor = staticMapPixel(label.position, center, zoom, width, height, scale);
-    const text = label.text;
-    const boxWidth = vectorTextWidth(text, fontSize) + paddingX * 2;
-    const boxHeight = fontSize + paddingY * 2;
-    const placeRight = anchor.x + gap + boxWidth <= outputWidth - margin;
-    const x = Math.min(
-      Math.max(placeRight ? anchor.x + gap : anchor.x - gap - boxWidth, margin),
-      outputWidth - boxWidth - margin,
-    );
-    const y = Math.min(
-      Math.max(anchor.y - boxHeight / 2, margin),
-      outputHeight - boxHeight - margin,
-    );
-    const lineEndX = placeRight ? x : x + boxWidth;
-    const lineY = y + boxHeight / 2;
-    const color = ringColorToCss(label.color);
-    const vectorY = y + (boxHeight - fontSize) / 2;
+    const boxWidth = svgTextWidth(font, label.text, fontSize) + paddingX * 2;
+    return {
+      text: label.text,
+      color: ringColorToCss(label.color),
+      width: boxWidth,
+      x: clampNumber(anchor.x - boxWidth / 2, margin, outputWidth - boxWidth - margin),
+      y: clampNumber(anchor.y - boxHeight / 2, margin, outputHeight - boxHeight - margin),
+      centerDistance: Math.hypot(
+        anchor.x - outputWidth / 2,
+        anchor.y - outputHeight / 2,
+      ),
+    };
+  });
 
+  // Innermost ring first; push any overlapping pill outward along the label
+  // bearing by the smallest shift that clears either axis.
+  const bearing = (RADIUS_LABEL_BEARING_DEGREES * Math.PI) / 180;
+  const dirX = Math.sin(bearing);
+  const dirY = -Math.cos(bearing);
+  boxes.sort((a, b) => a.centerDistance - b.centerDistance);
+  for (let i = 1; i < boxes.length; i++) {
+    const inner = boxes[i - 1];
+    const outer = boxes[i];
+    if (!inner || !outer) continue;
+    const overlaps =
+      outer.x < inner.x + inner.width + minGap &&
+      inner.x < outer.x + outer.width + minGap &&
+      outer.y < inner.y + boxHeight + minGap &&
+      inner.y < outer.y + boxHeight + minGap;
+    if (!overlaps) continue;
+    const clearX =
+      dirX > 0 ? (inner.x + inner.width + minGap - outer.x) / dirX : Infinity;
+    const clearY =
+      dirY < 0 ? (outer.y + boxHeight + minGap - inner.y) / -dirY : Infinity;
+    const shift = Math.max(0, Math.min(clearX, clearY));
+    outer.x = clampNumber(outer.x + dirX * shift, margin, outputWidth - outer.width - margin);
+    outer.y = clampNumber(outer.y + dirY * shift, margin, outputHeight - boxHeight - margin);
+  }
+
+  const elements = boxes.map((box) => {
+    const baseline = svgTextBaseline(font, fontSize, box.y, boxHeight);
     return `
-      <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="white" stroke-width="${4 * scale}" stroke-linecap="round" opacity="0.9" />
-      <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${color}" stroke-width="${1.5 * scale}" stroke-linecap="round" opacity="0.9" />
-      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${boxWidth.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${borderRadius}" fill="white" fill-opacity="0.92" stroke="${color}" stroke-width="${1.5 * scale}" />
-      ${vectorTextSvg(text, x + paddingX, vectorY, fontSize)}
+      <rect x="${box.x.toFixed(1)}" y="${box.y.toFixed(1)}" width="${box.width.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${(boxHeight / 2).toFixed(1)}" fill="white" fill-opacity="0.95" stroke="${box.color}" stroke-width="${2 * scale}" />
+      ${svgTextPath(font, box.text, box.x + paddingX, baseline, fontSize, box.color)}
     `;
   });
 
@@ -273,6 +223,7 @@ async function addPlaceLabels(
   scale: 1 | 2,
 ): Promise<Buffer> {
   if (labels.length === 0) return body;
+  const font = await getLabelFont();
 
   const outputWidth = width * scale;
   const outputHeight = height * scale;
@@ -285,8 +236,8 @@ async function addPlaceLabels(
 
   const elements = labels.map((label) => {
     const anchor = staticMapPixel(label.position, center, zoom, width, height, scale);
-    const text = escapeSvgText(label.text);
-    const boxWidth = text.length * fontSize * 0.58 + paddingX * 2;
+    const text = label.text;
+    const boxWidth = svgTextWidth(font, text, fontSize) + paddingX * 2;
     const boxHeight = fontSize + paddingY * 2;
     const placeRight = anchor.x + gap + boxWidth <= outputWidth - margin;
     const x = Math.min(
@@ -300,13 +251,13 @@ async function addPlaceLabels(
     const lineEndX = placeRight ? x : x + boxWidth;
     const lineY = y + boxHeight / 2;
     const color = markerColorToCss(label.color);
-    const textY = textBaselineY(y, paddingY, fontSize);
+    const baseline = svgTextBaseline(font, fontSize, y, boxHeight);
 
     return `
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="white" stroke-width="${4 * scale}" stroke-linecap="round" opacity="0.9" />
       <line x1="${anchor.x.toFixed(1)}" y1="${anchor.y.toFixed(1)}" x2="${lineEndX.toFixed(1)}" y2="${lineY.toFixed(1)}" stroke="${color}" stroke-width="${1.5 * scale}" stroke-linecap="round" opacity="0.9" />
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${boxWidth.toFixed(1)}" height="${boxHeight.toFixed(1)}" rx="${borderRadius}" fill="white" fill-opacity="0.92" stroke="${color}" stroke-width="${1.5 * scale}" />
-      <text x="${(x + paddingX).toFixed(1)}" y="${textY.toFixed(1)}" fill="#0f172a" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="600">${text}</text>
+      ${svgTextPath(font, text, x + paddingX, baseline, fontSize, "#0f172a")}
     `;
   });
 

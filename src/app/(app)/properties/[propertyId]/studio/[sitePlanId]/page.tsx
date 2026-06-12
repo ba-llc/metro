@@ -18,5 +18,6 @@ export default function PropertyStudioPage({
   params: Promise<{ propertyId: string; sitePlanId: string }>;
 }) {
   const { propertyId, sitePlanId } = use(params);
-  return <Studio propertyId={propertyId} sitePlanId={sitePlanId} />;
+  // Keyed by plan so switching plans remounts the editor with fresh page state.
+  return <Studio key={sitePlanId} propertyId={propertyId} sitePlanId={sitePlanId} />;
 }
