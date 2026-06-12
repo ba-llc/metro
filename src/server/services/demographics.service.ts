@@ -8,7 +8,7 @@ import {
   type DemographicMetrics,
 } from "@/server/providers/demographics/DemographicsProvider";
 
-export const DEFAULT_DEMOGRAPHIC_RADII = [1, 3, 5] as const;
+export const DEFAULT_DEMOGRAPHIC_RADII = [1, 3, 5, 10] as const;
 
 export async function listDemographics(ctx: OrgContext, propertyId: string) {
   await requireProperty(ctx, propertyId);
@@ -135,7 +135,7 @@ export async function fetchDemographics(
   });
 }
 
-/** Fetches standard 1/3/5-mile datasets from the configured provider. */
+/** Fetches standard 1/3/5/10-mile datasets from the configured provider. */
 export async function autoFetchDemographics(ctx: OrgContext, propertyId: string) {
   const provider = getDemographicsProvider();
   if (provider.name === "manual") {

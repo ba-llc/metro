@@ -109,6 +109,11 @@ function markerColorToCss(color: string): string {
   return MARKER_COLOR_CSS[color] ?? color;
 }
 
+function markerLabel(label?: string): string | undefined {
+  const normalized = label?.trim().toUpperCase();
+  return normalized && /^[A-Z0-9]$/.test(normalized) ? normalized : undefined;
+}
+
 function truncatePlaceName(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length <= PLACE_NAME_MAX_LENGTH) return trimmed;
@@ -338,11 +343,16 @@ export async function renderMapPng(
   let resolvedPlaces: Place[] = [];
 
   if (params.showPropertyMarker !== false) {
+    const label = markerLabel(params.propertyMarkerLabel);
     markers.push({
-      position: params.center,
+      position: offsetCenter(
+        params.center,
+        params.propertyMarkerOffsetNorthMiles ?? 0,
+        params.propertyMarkerOffsetEastMiles ?? 0,
+      ),
       color: params.propertyMarkerColor ?? "red",
-      label: params.propertyMarkerLabel,
-      size: preview ? "small" : "mid",
+      label,
+      size: preview && !label ? "small" : "mid",
     });
   }
 

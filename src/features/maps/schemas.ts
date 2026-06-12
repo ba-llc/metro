@@ -35,6 +35,10 @@ export const mapParamsSchema = z.object({
   showPropertyMarker: z.boolean().optional(),
   propertyMarkerColor: z.string().optional(),
   propertyMarkerLabel: z.string().max(1).optional(),
+  /** Shift only the property marker north (+) or south (-) in miles. */
+  propertyMarkerOffsetNorthMiles: z.coerce.number().min(-50).max(50).optional(),
+  /** Shift only the property marker east (+) or west (-) in miles. */
+  propertyMarkerOffsetEastMiles: z.coerce.number().min(-50).max(50).optional(),
   maxPlaceMarkers: z.coerce.number().int().min(0).max(40).optional(),
   /** When false, retail POI pins omit business name overlays. Defaults to true. */
   showPlaceLabels: z.boolean().optional(),

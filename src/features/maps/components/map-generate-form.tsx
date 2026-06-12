@@ -10,7 +10,7 @@ import {
   type PointerEvent,
   type WheelEvent,
 } from "react";
-import { LocateFixed, Minus, Plus, RotateCcw } from "lucide-react";
+import { LocateFixed, MapPin, Minus, Plus, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   CustomSelect,
@@ -60,6 +60,16 @@ const minManualZoom = 8;
 const maxManualZoom = 20;
 const earthCircumferenceMiles = 24901;
 const framingLatitudeCosine = 0.766;
+const markerColorCss: Record<string, string> = {
+  red: "#dc2626",
+  blue: "#1d4ed8",
+  green: "#059669",
+  orange: "#ea580c",
+  purple: "#9333ea",
+  yellow: "#ca8a04",
+  black: "#0f172a",
+  white: "#f8fafc",
+};
 
 const mapKindOptions: readonly CustomSelectOption<MapCreateInput["kind"]>[] =
   mapKinds.map((value) => ({
@@ -110,6 +120,18 @@ function milesPerMapPixel(zoom: number) {
   return (earthCircumferenceMiles * framingLatitudeCosine) / (256 * 2 ** zoom);
 }
 
+function zoomForRadius(radiusMiles: number) {
+  if (radiusMiles <= 1) return 14;
+  if (radiusMiles <= 3) return 12;
+  if (radiusMiles <= 5) return 11;
+  if (radiusMiles <= 10) return 10;
+  return 9;
+}
+
+function sanitizeMarkerLabel(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 1);
+}
+
 export function MapGenerateForm({
   propertyId,
   loading,
@@ -140,8 +162,20 @@ export function MapGenerateForm({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [configWidth, setConfigWidth] = useState(defaultConfigWidth);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [previewSize, setPreviewSize] = useState({ width: 0, height: 0 });
+  const [markerDragOffset, setMarkerDragOffset] = useState({ x: 0, y: 0 });
   const layoutRef = useRef<HTMLDivElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const dragStartRef = useRef<{
+    pointerId: number;
+    x: number;
+    y: number;
+    previewWidth: number;
+    previewHeight: number;
+    startNorth: number;
+    startEast: number;
+  } | null>(null);
+  const markerDragStartRef = useRef<{
     pointerId: number;
     x: number;
     y: number;
@@ -212,9 +246,15 @@ export function MapGenerateForm({
       setPreviewLoading(true);
       setPreviewError(null);
       try {
+        const input = buildInput();
         const blob = await fetchMapPreviewBlob(
           propertyId,
-          buildInput(),
+          input.params.showPropertyMarker !== false
+            ? {
+                ...input,
+                params: { ...input.params, showPropertyMarker: false },
+              }
+            : input,
           ac.signal,
         );
         const url = URL.createObjectURL(blob);
@@ -264,12 +304,63 @@ export function MapGenerateForm({
     return () => resizeObserver.disconnect();
   }, []);
 
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+
+    const update = () => {
+      setPreviewSize({
+        width: preview.clientWidth,
+        height: preview.clientHeight,
+      });
+    };
+    update();
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(preview);
+    return () => resizeObserver.disconnect();
+  }, []);
+
   function handleSubmit() {
     onSubmit(buildInput());
   }
 
   const currentZoom = params.zoom ?? defaultMapParams(kind).zoom ?? 12;
   const manualZoom = clamp(currentZoom, minManualZoom, maxManualZoom);
+  const showManualZoom = !usesAutoZoom(kind) || params.autoZoom === false;
+  const parsedRadii = parseRadii();
+  const effectiveZoom =
+    showManualZoom || !usesAutoZoom(kind)
+      ? manualZoom
+      : zoomForRadius(Math.max(...parsedRadii));
+  const outputSize =
+    mapSizePresets.find((p) => p.id === sizePreset) ?? mapSizePresets[0];
+  const markerRelativeEast =
+    (params.propertyMarkerOffsetEastMiles ?? 0) -
+    (params.centerOffsetEastMiles ?? 0);
+  const markerRelativeNorth =
+    (params.propertyMarkerOffsetNorthMiles ?? 0) -
+    (params.centerOffsetNorthMiles ?? 0);
+  const markerMilesPerPixel = milesPerMapPixel(effectiveZoom);
+  const markerPoint =
+    previewSize.width > 0 && previewSize.height > 0
+      ? {
+          x:
+            (outputSize.width / 2 + markerRelativeEast / markerMilesPerPixel) *
+              (previewSize.width / outputSize.width) +
+            dragOffset.x +
+            markerDragOffset.x,
+          y:
+            (outputSize.height / 2 - markerRelativeNorth / markerMilesPerPixel) *
+              (previewSize.height / outputSize.height) +
+            dragOffset.y +
+            markerDragOffset.y,
+        }
+      : null;
+  const markerLabel = sanitizeMarkerLabel(params.propertyMarkerLabel ?? "");
+  const markerColor = markerColorCss[params.propertyMarkerColor ?? "red"] ?? "#dc2626";
+  const markerOffsetLabel = `${(params.propertyMarkerOffsetNorthMiles ?? 0).toFixed(
+    2,
+  )} mi N, ${(params.propertyMarkerOffsetEastMiles ?? 0).toFixed(2)} mi E`;
 
   function setManualZoom(nextZoom: number) {
     patch({
@@ -284,6 +375,13 @@ export function MapGenerateForm({
       zoom: defaultMapParams(kind).zoom,
       centerOffsetNorthMiles: 0,
       centerOffsetEastMiles: 0,
+    });
+  }
+
+  function resetMarkerPlacement() {
+    patch({
+      propertyMarkerOffsetNorthMiles: 0,
+      propertyMarkerOffsetEastMiles: 0,
     });
   }
 
@@ -346,12 +444,105 @@ export function MapGenerateForm({
     });
   }
 
+  function startMarkerDrag(event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const preview = previewRef.current;
+    if (!preview) return;
+    const start = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      previewWidth: preview.clientWidth,
+      previewHeight: preview.clientHeight,
+      startNorth: params.propertyMarkerOffsetNorthMiles ?? 0,
+      startEast: params.propertyMarkerOffsetEastMiles ?? 0,
+    };
+    markerDragStartRef.current = {
+      ...start,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setMarkerDragOffset({ x: 0, y: 0 });
+
+    const onMove = (moveEvent: globalThis.PointerEvent) => {
+      if (moveEvent.pointerId !== start.pointerId) return;
+      moveEvent.preventDefault();
+      setMarkerDragOffset({
+        x: moveEvent.clientX - start.x,
+        y: moveEvent.clientY - start.y,
+      });
+    };
+
+    const onUp = (upEvent: globalThis.PointerEvent) => {
+      if (upEvent.pointerId !== start.pointerId) return;
+      upEvent.preventDefault();
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+
+      const dx = upEvent.clientX - start.x;
+      const dy = upEvent.clientY - start.y;
+      markerDragStartRef.current = null;
+      setMarkerDragOffset({ x: 0, y: 0 });
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+
+      const mapDx = dx * (outputSize.width / Math.max(1, start.previewWidth));
+      const mapDy = dy * (outputSize.height / Math.max(1, start.previewHeight));
+      const milesPerPixel = milesPerMapPixel(effectiveZoom);
+      patch({
+        propertyMarkerOffsetEastMiles: Number(
+          (start.startEast + mapDx * milesPerPixel).toFixed(3),
+        ),
+        propertyMarkerOffsetNorthMiles: Number(
+          (start.startNorth - mapDy * milesPerPixel).toFixed(3),
+        ),
+      });
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  function moveMarkerDrag(event: PointerEvent<HTMLButtonElement>) {
+    const start = markerDragStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setMarkerDragOffset({
+      x: event.clientX - start.x,
+      y: event.clientY - start.y,
+    });
+  }
+
+  function endMarkerDrag(event: PointerEvent<HTMLButtonElement>) {
+    const start = markerDragStartRef.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    markerDragStartRef.current = null;
+    setMarkerDragOffset({ x: 0, y: 0 });
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+
+    const mapDx = dx * (outputSize.width / Math.max(1, start.previewWidth));
+    const mapDy = dy * (outputSize.height / Math.max(1, start.previewHeight));
+    const milesPerPixel = milesPerMapPixel(effectiveZoom);
+    patch({
+      propertyMarkerOffsetEastMiles: Number(
+        (start.startEast + mapDx * milesPerPixel).toFixed(3),
+      ),
+      propertyMarkerOffsetNorthMiles: Number(
+        (start.startNorth - mapDy * milesPerPixel).toFixed(3),
+      ),
+    });
+  }
+
   function handlePreviewWheel(event: WheelEvent<HTMLDivElement>) {
     event.preventDefault();
     setManualZoom(manualZoom + (event.deltaY < 0 ? 1 : -1));
   }
 
-  const showManualZoom = !usesAutoZoom(kind) || params.autoZoom === false;
   const maxConfigWidth =
     layoutRef.current?.clientWidth != null
       ? Math.max(
@@ -570,25 +761,44 @@ export function MapGenerateForm({
             Show property pin
           </label>
           {params.showPropertyMarker !== false ? (
-            <div className="grid grid-cols-2 gap-4">
-              <CustomSelect
-                label="Pin color"
-                value={params.propertyMarkerColor ?? "red"}
-                options={markerColorSelectOptions}
-                onValueChange={(propertyMarkerColor) =>
-                  patch({ propertyMarkerColor })
-                }
-              />
-              <Field label="Pin label">
-                <Input
-                  maxLength={1}
-                  value={params.propertyMarkerLabel ?? ""}
-                  onChange={(e) =>
-                    patch({ propertyMarkerLabel: e.target.value || undefined })
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-4">
+                <CustomSelect
+                  label="Pin color"
+                  value={params.propertyMarkerColor ?? "red"}
+                  options={markerColorSelectOptions}
+                  onValueChange={(propertyMarkerColor) =>
+                    patch({ propertyMarkerColor })
                   }
-                  placeholder="P"
                 />
-              </Field>
+                <Field label="Pin label">
+                  <Input
+                    inputMode="text"
+                    maxLength={1}
+                    value={params.propertyMarkerLabel ?? ""}
+                    onChange={(e) => {
+                      const propertyMarkerLabel = sanitizeMarkerLabel(
+                        e.target.value,
+                      );
+                      patch({
+                        propertyMarkerLabel:
+                          propertyMarkerLabel || undefined,
+                      });
+                    }}
+                    placeholder="P"
+                  />
+                </Field>
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                <span>Pin offset: {markerOffsetLabel}</span>
+                <button
+                  type="button"
+                  className="shrink-0 font-medium text-brand-700 hover:text-brand-900"
+                  onClick={resetMarkerPlacement}
+                >
+                  Reset pin
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -719,6 +929,7 @@ export function MapGenerateForm({
           Live preview
         </p>
         <div
+          ref={previewRef}
           className="relative aspect-4/3 touch-none overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
           onPointerDown={startPreviewDrag}
           onPointerMove={movePreviewDrag}
@@ -749,6 +960,30 @@ export function MapGenerateForm({
             <div className="absolute inset-0 bg-white/70 p-4">
               <Skeleton className="size-full rounded-md" />
             </div>
+          ) : null}
+          {params.showPropertyMarker !== false && markerPoint ? (
+            <button
+              type="button"
+              title="Drag property pin"
+              aria-label="Drag property pin"
+              className="absolute z-10 flex size-8 -translate-x-1/2 -translate-y-full cursor-grab items-center justify-center rounded-full text-white drop-shadow-[0_2px_3px_rgba(15,23,42,0.35)] active:cursor-grabbing"
+              style={{ left: markerPoint.x, top: markerPoint.y }}
+              onPointerDown={startMarkerDrag}
+              onPointerMove={moveMarkerDrag}
+              onPointerUp={endMarkerDrag}
+              onPointerCancel={endMarkerDrag}
+            >
+              <MapPin
+                className="size-8 stroke-white"
+                fill={markerColor}
+                strokeWidth={1.8}
+              />
+              {markerLabel ? (
+                <span className="pointer-events-none absolute left-1/2 top-[5px] -translate-x-1/2 text-[10px] font-bold leading-none text-white">
+                  {markerLabel}
+                </span>
+              ) : null}
+            </button>
           ) : null}
           <div
             className="absolute left-3 top-3 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm"

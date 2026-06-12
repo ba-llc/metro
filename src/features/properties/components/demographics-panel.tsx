@@ -124,7 +124,7 @@ export function DemographicsPanel({
               title="No demographic data"
               description={
                 canAutoFetch
-                  ? "Demographics auto-populate when you geocode an address. You can also fetch 1/3/5-mile trade areas from US Census ACS using the zip code or coordinates."
+                  ? "Demographics auto-populate when you geocode an address. You can also fetch 1/3/5/10-mile trade areas from US Census ACS using the zip code or coordinates."
                   : "Add an address with a zip code, then geocode or auto-fetch Census demographics."
               }
               action={
@@ -179,6 +179,7 @@ export function DemographicsPanel({
                 { value: "1", label: "1 Mile" },
                 { value: "3", label: "3 Mile" },
                 { value: "5", label: "5 Mile" },
+                { value: "10", label: "10 Mile" },
               ]}
             />
           </Field>

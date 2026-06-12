@@ -161,6 +161,7 @@ async function main() {
     [1, { population: 14820, households: 5630, avgHouseholdIncome: 128400, daytimePopulation: 11200, medianHousingValue: 412000, medianAge: 42.1 }],
     [3, { population: 121400, households: 46900, avgHouseholdIncome: 142800, daytimePopulation: 98400, medianHousingValue: 455000, medianAge: 40.8 }],
     [5, { population: 318600, households: 124200, avgHouseholdIncome: 136200, daytimePopulation: 287300, medianHousingValue: 438000, medianAge: 39.6 }],
+    [10, { population: 812400, households: 318900, avgHouseholdIncome: 129600, daytimePopulation: 744200, medianHousingValue: 421000, medianAge: 39.1 }],
   ] as const) {
     await db.demographicDataset.create({
       data: {

@@ -305,6 +305,7 @@ export function PremiumMarketBlock({ context, images }: BlockProps): ReactElemen
 
 export function PremiumDemographicsBlock({ context, images }: BlockProps): ReactElement {
   const map = img(images, context.imageAssets.tradeArea) ?? img(images, context.imageAssets.radius);
+  const demographics = context.demographics.slice(0, 4);
   const rows: Array<[string, keyof RenderContext["demographics"][number]["metrics"], (v?: number) => string]> = [
     ["Population", "population", formatMetric],
     ["Households", "households", formatMetric],
@@ -324,7 +325,7 @@ export function PremiumDemographicsBlock({ context, images }: BlockProps): React
           <thead>
             <tr>
               <th>Metric</th>
-              {context.demographics.slice(0, 3).map((demo) => (
+              {demographics.map((demo) => (
                 <th key={demo.label}>{demo.label}</th>
               ))}
             </tr>
@@ -333,7 +334,7 @@ export function PremiumDemographicsBlock({ context, images }: BlockProps): React
             {rows.map(([label, key, format]) => (
               <tr key={label}>
                 <td>{label}</td>
-                {context.demographics.slice(0, 3).map((demo) => (
+                {demographics.map((demo) => (
                   <td key={demo.label}>{format(demo.metrics[key])}</td>
                 ))}
               </tr>
